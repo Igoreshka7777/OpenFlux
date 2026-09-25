@@ -19,6 +19,7 @@ targets:
       - path: OpenFlux
     dependencies:
       - target: OpenFluxTunnel
+        embed: true
     info:
       path: OpenFlux/Info.plist
       properties:
