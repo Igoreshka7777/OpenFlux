@@ -9,11 +9,23 @@ final class VPNController: ObservableObject {
     @Published var log = UserDefaults.standard.string(forKey: "vpnDiagnosticLog") ?? ""
 
     private var manager: NETunnelProviderManager?
-    private let extensionBundleId = "com.p1neapplexpress-saharev.openflux.tunnel"
+    private var extensionBundleId: String? {
+        guard let plugins = Bundle.main.builtInPlugInsURL else { return nil }
+        return Bundle(url: plugins.appendingPathComponent("OpenFluxTunnel.appex"))?.bundleIdentifier
+    }
     private var logTimer: Timer?
     private var logRequestInFlight = false
     private var logRequestID = 0
     private var lastStatus: NEVPNStatus?
+    private var manualStopPending = false
+    private var diagnosticsOpen = false
+    private var desiredRunning = false
+    private var subscriptionURL = ""
+    private var reconnectAttempts = 0
+    private var reconnectTask: Task<Void, Never>?
+    private var reconnectGeneration = 0
+    private var connectionGeneration = 0
+    private var connecting = false
 
     init() {
         NotificationCenter.default.addObserver(
@@ -28,48 +40,115 @@ final class VPNController: ObservableObject {
     deinit { logTimer?.invalidate() }
 
     private func load() async {
+        guard let extensionBundleId else {
+            appendLog("[app] VPN extension missing from installed app")
+            refreshStatus()
+            return
+        }
+        appendLog("[app] VPN extension ID: \(extensionBundleId)")
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             manager = managers.first { ($0.protocolConfiguration as? NETunnelProviderProtocol)?
                 .providerBundleIdentifier == extensionBundleId }
+            desiredRunning = manager?.isOnDemandEnabled == true
+            subscriptionURL = UserDefaults.standard.string(forKey: "wbSubscriptionURL") ?? ""
             appendLog("[app] Настройки VPN загружены")
         } catch {
             appendLog("[app] Ошибка загрузки настроек VPN: \(error.localizedDescription)")
         }
         refreshStatus()
+        if desiredRunning && manager?.connection.status == .disconnected {
+            scheduleReconnect()
+        }
     }
 
     func start(url: String) {
+        manualStopPending = false
+        desiredRunning = true
+        subscriptionURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        reconnectAttempts = 0
+        reconnectGeneration += 1
+        connectionGeneration += 1
+        reconnectTask?.cancel()
+        reconnectTask = nil
         appendLog("[app] Подключение запрошено")
-        Task {
+        guard extensionBundleId != nil else {
+            status = "Error: VPN extension missing"
+            appendLog("[app] Check signature and OpenFluxTunnel.appex installation")
+            return
+        }
+        Task { await connectFromSubscription() }
+    }
+
+    private func connectFromSubscription() async {
+        guard desiredRunning, !connecting else { return }
+        connecting = true
+        defer { connecting = false }
+        let generation = connectionGeneration
+        do {
+            let node = try await WBSubscription.load(subscriptionURL)
+            guard desiredRunning, generation == connectionGeneration else { return }
             let m = manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = extensionBundleId
-            proto.serverAddress = "Mail.ru / OpenFlux"
+            proto.serverAddress = "WB Stream / OpenFlux"
             proto.disconnectOnSleep = false
             proto.providerConfiguration = [
-                "transport": "mailru",
-                "url": url.trimmingCharacters(in: .whitespacesAndNewlines)
+                "configurationVersion": 3,
+                "nodes": [node],
+                "selectedNodeIndex": 0
             ]
             m.protocolConfiguration = proto
             m.localizedDescription = "Igor VPN"
             m.isEnabled = true
             m.onDemandRules = [NEOnDemandRuleConnect()]
             m.isOnDemandEnabled = true
-            do {
-                try await m.saveToPreferences()
-                try await m.loadFromPreferences()
-                manager = m
-                try m.connection.startVPNTunnel()
-                appendLog("[app] Запуск расширения VPN")
-            } catch {
-                status = "Error: \(error.localizedDescription)"
-                appendLog("[app] Ошибка запуска VPN: \(error.localizedDescription)")
+            try await m.saveToPreferences()
+            try await m.loadFromPreferences()
+            guard desiredRunning, generation == connectionGeneration else { return }
+            manager = m
+            try m.connection.startVPNTunnel()
+            appendLog("[app] Запуск расширения VPN через WB Stream")
+        } catch {
+            guard desiredRunning, generation == connectionGeneration else { return }
+            appendLog("[app] Ошибка подключения: \(error.localizedDescription)")
+            scheduleReconnect()
+        }
+    }
+
+    private func scheduleReconnect() {
+        guard desiredRunning, reconnectTask == nil else { return }
+        reconnectAttempts = min(reconnectAttempts + 1, 7)
+        let seconds = min(60, 1 << min(reconnectAttempts, 6))
+        reconnectGeneration += 1
+        let generation = reconnectGeneration
+        status = "Reconnecting…"
+        active = true
+        appendLog("[app] Повторное подключение через \(seconds) с")
+        reconnectTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+            guard reconnectGeneration == generation else { return }
+            reconnectTask = nil
+            guard !Task.isCancelled, desiredRunning else { return }
+            let state = manager?.connection.status
+            if state == .connected || state == .connecting || state == .reasserting { return }
+            if connecting {
+                scheduleReconnect()
+            } else {
+                await connectFromSubscription()
             }
         }
     }
 
     func stop() {
+        manualStopPending = true
+        desiredRunning = false
+        reconnectGeneration += 1
+        connectionGeneration += 1
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        active = false
+        status = "Disconnected"
         refreshLog()
         appendLog("[app] Отключение запрошено")
         Task {
@@ -117,6 +196,11 @@ final class VPNController: ObservableObject {
         }
     }
 
+    func setVerboseLogging(_ enabled: Bool) {
+        diagnosticsOpen = enabled
+        if enabled { refreshLog() }
+    }
+
     func clearLog() {
         log = ""
         UserDefaults.standard.removeObject(forKey: "vpnDiagnosticLog")
@@ -125,7 +209,7 @@ final class VPNController: ObservableObject {
     private func appendLog(_ chunk: String) {
         let combined = log.isEmpty ? chunk : log + "\n" + chunk
         let lines = combined.split(separator: "\n", omittingEmptySubsequences: true)
-        log = lines.suffix(300).joined(separator: "\n")
+        log = lines.suffix(2000).joined(separator: "\n")
         UserDefaults.standard.set(log, forKey: "vpnDiagnosticLog")
     }
 
@@ -141,13 +225,49 @@ final class VPNController: ObservableObject {
         case .connected: status = "Connected"; active = true
         case .connecting: status = "Connecting…"; active = true
         case .disconnecting: status = "Disconnecting…"; active = true
-        case .reasserting: status = "Reasserting…"; active = true
-        default: status = "Disconnected"; active = false
+        case .reasserting: status = "Reconnecting…"; active = true
+        default:
+            status = desiredRunning ? "Reconnecting…" : "Disconnected"
+            active = desiredRunning
         }
         if lastStatus != conn.status {
+            let previousStatus = lastStatus
             lastStatus = conn.status
             appendLog("[app] Состояние VPN: \(status)")
-            if conn.status == .connected { refreshLog() }
+            if conn.status == .connected {
+                manualStopPending = false
+                reconnectAttempts = 0
+                reconnectTask?.cancel()
+                reconnectTask = nil
+                if diagnosticsOpen { setVerboseLogging(true) }
+                refreshLog()
+            } else if conn.status == .disconnected || conn.status == .invalid {
+                let unexpected = !manualStopPending &&
+                    (previousStatus == .connecting || previousStatus == .connected ||
+                     previousStatus == .reasserting || previousStatus == .disconnecting)
+                manualStopPending = false
+                if unexpected { readLastDisconnectError(from: conn) }
+                if desiredRunning { scheduleReconnect() }
+            }
+        }
+    }
+
+    private func readLastDisconnectError(from connection: NEVPNConnection) {
+        connection.fetchLastDisconnectError { [weak self] error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if let error = error {
+                    let nsError = error as NSError
+                    self.appendLog("[system] VPN disconnected: \(nsError.domain) " +
+                                   "code=\(nsError.code): \(nsError.localizedDescription)")
+                    if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                        self.appendLog("[system] Underlying: \(underlying.domain) " +
+                                       "code=\(underlying.code): \(underlying.localizedDescription)")
+                    }
+                } else {
+                    self.appendLog("[system] VPN disconnected without a reported error")
+                }
+            }
         }
     }
 }

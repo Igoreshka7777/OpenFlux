@@ -1,118 +1,146 @@
-import Foundation
 import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-    private let stateLock = NSLock()
-    private var stoppedStorage = false
+  private let lifecycleQueue = DispatchQueue(
+    label: "com.github.hu553in.onelastchance.packet-tunnel-lifecycle")
+  private var supervisor: TunnelSupervisor?
+  private var generation = 0
 
-    private var stopped: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return stoppedStorage }
-        set { stateLock.lock(); stoppedStorage = newValue; stateLock.unlock() }
+  override func startTunnel(
+    options: [String: NSObject]?,
+    completionHandler: @escaping (Error?) -> Void
+  ) {
+    lifecycleQueue.async {
+      self.beginStart(completionHandler: completionHandler)
     }
+  }
 
-    override func startTunnel(options: [String: NSObject]?,
-                              completionHandler: @escaping (Error?) -> Void) {
-        let conf = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
-        let url = (conf["url"] as? String) ?? ""
-        stopped = false
-
-        guard !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            completionHandler(NSError(domain: "IgorVPN", code: 100,
-                userInfo: [NSLocalizedDescriptionKey: "Добавьте ссылку Mail.ru в настройках."]))
-            return
-        }
-
-        setTunnelNetworkSettings(makeSettings()) { [weak self] error in
-            guard let self = self else { return }
-            if let error = error {
-                completionHandler(error)
-                return
-            }
-            let rc = url.withCString { value in
-                OpenFluxStartPacketTunnel(UnsafeMutablePointer(mutating: value))
-            }
-            if rc != 0 {
-                completionHandler(NSError(domain: "IgorVPN", code: Int(rc),
-                    userInfo: [NSLocalizedDescriptionKey: "Не удалось запустить Mail.ru (\(rc)). Откройте диагностику."]))
-                return
-            }
-            self.startReadLoop()
-            self.startWriteLoop()
-            completionHandler(nil)
-        }
-    }
-
-    override func stopTunnel(with reason: NEProviderStopReason,
-                             completionHandler: @escaping () -> Void) {
-        stopped = true
-        OpenFluxStopPacketTunnel()
+  override func stopTunnel(
+    with reason: NEProviderStopReason,
+    completionHandler: @escaping () -> Void
+  ) {
+    TunnelLogger.info("Stop requested with reason \(reason.rawValue).")
+    lifecycleQueue.async {
+      self.generation += 1
+      self.reasserting = false
+      guard let supervisor = self.supervisor else {
         completionHandler()
+        return
+      }
+      self.supervisor = nil
+      supervisor.stop(completion: completionHandler)
     }
+  }
 
-    override func handleAppMessage(_ messageData: Data,
-                                   completionHandler: ((Data?) -> Void)?) {
-        guard String(data: messageData, encoding: .utf8) == "logs" else {
-            completionHandler?(nil)
-            return
+  override func handleAppMessage(
+    _ messageData: Data,
+    completionHandler: ((Data?) -> Void)? = nil
+  ) {
+    guard messageData == Data("logs".utf8) else {
+      completionHandler?(nil)
+      return
+    }
+    completionHandler?(TunnelLogger.drain().data(using: .utf8))
+  }
+
+  private func beginStart(completionHandler: @escaping (Error?) -> Void) {
+    generation += 1
+    let currentGeneration = generation
+    TunnelLogger.info(
+      "PacketTunnelProvider entered; build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown")."
+    )
+    do {
+      guard
+        let configuration = (protocolConfiguration as? NETunnelProviderProtocol)?
+          .providerConfiguration
+      else {
+        throw PacketTunnelError.missingConfiguration
+      }
+      let supervisor = try TunnelSupervisor(
+        providerConfiguration: configuration,
+        cancelTunnel: { [weak self] error in
+          self?.lifecycleQueue.async {
+            guard self?.generation == currentGeneration else { return }
+            TunnelLogger.info("Cancelling packet tunnel: \(error.localizedDescription)")
+            self?.cancelTunnelWithError(error)
+          }
         }
-        guard let value = OpenFluxReadLog() else {
-            completionHandler?(Data())
+      )
+      self.supervisor = supervisor
+      supervisor.start { error in
+        self.lifecycleQueue.async {
+          guard self.isCurrent(supervisor, generation: currentGeneration) else {
+            completionHandler(PacketTunnelError.cancelled)
             return
-        }
-        let message = String(cString: value)
-        OpenFluxFreeString(value)
-        completionHandler?(Data(message.utf8))
-    }
-
-    private func makeSettings() -> NEPacketTunnelNetworkSettings {
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
-        let ipv4 = NEIPv4Settings(addresses: ["10.10.10.2"],
-                                  subnetMasks: ["255.255.255.0"])
-        ipv4.includedRoutes = [NEIPv4Route.default()]
-        settings.ipv4Settings = ipv4
-
-        // The exit currently supports IPv4 TCP only. Capture IPv6 so IPv6
-        // literals cannot bypass the VPN; AAAA DNS answers are suppressed.
-        let ipv6 = NEIPv6Settings(addresses: ["fd00:10:10:10::2"],
-                                  networkPrefixLengths: [64])
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        settings.ipv6Settings = ipv6
-
-        settings.mtu = 1500
-        let dns = NEDNSSettings(servers: ["198.18.0.1"])
-        dns.matchDomains = [""]
-        settings.dnsSettings = dns
-        return settings
-    }
-
-    private func startReadLoop() {
-        packetFlow.readPackets { [weak self] packets, _ in
-            guard let self = self, !self.stopped else { return }
-            for packet in packets {
-                packet.withUnsafeBytes { raw in
-                    if let base = raw.bindMemory(to: CChar.self).baseAddress {
-                        OpenFluxTunWritePacket(UnsafeMutablePointer(mutating: base),
-                                               Int32(packet.count))
-                    }
+          }
+          if let error {
+            self.failStart(error, supervisor: supervisor, completionHandler: completionHandler)
+            return
+          }
+          TunnelLogger.info("olcRTC is ready; applying full-tunnel network settings.")
+          self.setTunnelNetworkSettings(TunnelSupervisor.networkSettings()) { error in
+            self.lifecycleQueue.async {
+              guard self.isCurrent(supervisor, generation: currentGeneration) else {
+                completionHandler(PacketTunnelError.cancelled)
+                return
+              }
+              if let error {
+                self.failStart(error, supervisor: supervisor, completionHandler: completionHandler)
+                return
+              }
+              TunnelLogger.info("Network settings applied; starting packet forwarding.")
+              supervisor.startForwarding { error in
+                self.lifecycleQueue.async {
+                  guard self.isCurrent(supervisor, generation: currentGeneration) else {
+                    completionHandler(PacketTunnelError.cancelled)
+                    return
+                  }
+                  if let error {
+                    self.failStart(
+                      error, supervisor: supervisor, completionHandler: completionHandler)
+                    return
+                  }
+                  self.reasserting = false
+                  TunnelLogger.info("Packet tunnel fully established.")
+                  completionHandler(nil)
                 }
+              }
             }
-            self.startReadLoop()
+          }
         }
+      }
+    } catch {
+      TunnelLogger.error("Packet tunnel setup failed: \(error.localizedDescription)")
+      completionHandler(error)
     }
+  }
 
-    private func startWriteLoop() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let maxLen: Int32 = 4096
-            let buffer = UnsafeMutablePointer<CChar>.allocate(capacity: Int(maxLen))
-            defer { buffer.deallocate() }
-            while true {
-                let length = OpenFluxTunReadPacket(buffer, maxLen)
-                if length <= 0 { break }
-                let data = Data(bytes: buffer, count: Int(length))
-                self.packetFlow.writePackets([data],
-                    withProtocols: [NSNumber(value: AF_INET)])
-            }
-        }
+  private func isCurrent(_ supervisor: TunnelSupervisor, generation: Int) -> Bool {
+    self.generation == generation && self.supervisor === supervisor
+  }
+
+  private func failStart(
+    _ error: Error,
+    supervisor: TunnelSupervisor,
+    completionHandler: @escaping (Error?) -> Void
+  ) {
+    TunnelLogger.error("Packet tunnel start failed: \(error.localizedDescription)")
+    generation += 1
+    self.supervisor = nil
+    reasserting = false
+    completionHandler(error)
+    supervisor.stop {}
+  }
+}
+
+private enum PacketTunnelError: LocalizedError {
+  case cancelled
+  case missingConfiguration
+
+  var errorDescription: String? {
+    switch self {
+    case .cancelled: "The packet tunnel start was cancelled."
+    case .missingConfiguration: "The packet tunnel has no saved subscription configuration."
     }
+  }
 }

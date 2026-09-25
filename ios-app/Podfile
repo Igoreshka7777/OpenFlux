@@ -1,0 +1,8 @@
+platform :ios, '15.0'
+use_frameworks! :linkage => :static
+
+project 'OpenFlux.xcodeproj'
+
+target 'OpenFluxTunnel' do
+  pod 'Tun2SocksKit', :podspec => 'https://raw.githubusercontent.com/EbrahimTahernejad/Tun2SocksKit/5.16.0/Tun2SocksKit.podspec'
+end

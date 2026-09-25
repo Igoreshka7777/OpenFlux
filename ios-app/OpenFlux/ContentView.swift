@@ -14,7 +14,7 @@ private enum Theme {
 
 struct ContentView: View {
     @StateObject private var vpn = VPNController()
-    @AppStorage("mailruURL") private var docURL = ""
+    @AppStorage("wbSubscriptionURL") private var docURL = ""
     @State private var showSettings = false
     @State private var showSupport = false
     @State private var breathe = false
@@ -105,13 +105,14 @@ struct ContentView: View {
             .accessibilityLabel(vpn.active ? "Отключить VPN" : "Подключить VPN")
 
             Text(vpn.status == "Connected" ? "ПОДКЛЮЧЕНО" :
-                 (isConnecting ? "ПОДКЛЮЧЕНИЕ…" : "НЕ ПОДКЛЮЧЕНО"))
+                 (vpn.status == "Reconnecting…" ? "ПЕРЕПОДКЛЮЧЕНИЕ…" :
+                  (isConnecting ? "ПОДКЛЮЧЕНИЕ…" : "НЕ ПОДКЛЮЧЕНО")))
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .tracking(2.8)
                 .foregroundColor(vpn.status == "Connected" ? Theme.orange : .white)
                 .padding(.top, 32)
             Text(canStart ? "Нажмите на круг, чтобы \(vpn.active ? "отключить" : "подключить") VPN" :
-                 "Добавьте ссылку Mail.ru в настройках")
+                 "Добавьте ссылку подписки в настройках")
                 .font(.system(size: 13))
                 .foregroundColor(Theme.muted)
                 .multilineTextAlignment(.center)
@@ -174,13 +175,13 @@ private struct SettingsView: View {
                             Text("ПОДКЛЮЧЕНИЕ")
                                 .font(.caption.bold()).tracking(1.8)
                                 .foregroundColor(Theme.orange)
-                            TextField("Ссылка на документ Mail.ru", text: $docURL)
+                            TextField("Ссылка подписки WB Stream", text: $docURL)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .keyboardType(.URL)
                                 .textFieldStyle(.roundedBorder)
                                 .disabled(vpn.active)
-                            Text("Используйте ссылку VPN-узла, а не ссылку пользователя из веб-панели.")
+                            Text("Вставьте персональную ссылку подписки из веб-панели.")
                                 .font(.caption)
                                 .foregroundColor(Theme.muted)
                         }
@@ -284,7 +285,11 @@ private struct DiagnosticsView: View {
         }
         .navigationViewStyle(.stack)
         .preferredColorScheme(.dark)
-        .onAppear { vpn.refreshLog() }
+        .onAppear {
+            vpn.setVerboseLogging(true)
+            vpn.refreshLog()
+        }
+        .onDisappear { vpn.setVerboseLogging(false) }
     }
 }
 

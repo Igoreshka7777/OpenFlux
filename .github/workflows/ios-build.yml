@@ -1,4 +1,4 @@
-name: iOS build check
+name: iOS WB Stream build
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   ios:
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Check out source
         uses: actions/checkout@v6
@@ -20,30 +20,30 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: ios-wb-runtime/go.mod
+          cache-dependency-path: ios-wb-runtime/go.sum
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install iOS project tools
+        run: brew install xcodegen cocoapods
 
-      - name: Check Go packages
-        run: go test ./iosroute ./transport/mailru
+      - name: Test WB runtime
+        working-directory: ios-wb-runtime
+        run: go test ./...
 
-      - name: Build iOS Go library
-        run: ./build_ios.sh
+      - name: Build WB runtime for iOS
+        run: bash ./build_ios_wb.sh
 
-      - name: Generate Xcode project
+      - name: Generate Xcode project and install pods
+        working-directory: ios-app
         run: |
-          mkdir -p ios-app/Lib
-          cp output/ios/liboflux.a output/ios/liboflux.h ios-app/Lib/
-          cd ios-app
           xcodegen generate
+          pod install
 
       - name: Compile iPhone app without signing
         working-directory: ios-app
         run: |
           xcodebuild \
-            -project OpenFlux.xcodeproj \
+            -workspace OpenFlux.xcworkspace \
             -scheme OpenFlux \
             -configuration Release \
             -destination 'generic/platform=iOS' \
@@ -56,11 +56,11 @@ jobs:
         run: |
           ditto -c -k --keepParent \
             build/DerivedData/Build/Products/Release-iphoneos/OpenFlux.app \
-            build/IgorVPN-unsigned.app.zip
+            build/IgorVPN-WBStream-unsigned.app.zip
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
-          name: IgorVPN-unsigned-iphoneos
-          path: ios-app/build/IgorVPN-unsigned.app.zip
+          name: IgorVPN-WBStream-unsigned-iphoneos
+          path: ios-app/build/IgorVPN-WBStream-unsigned.app.zip
           if-no-files-found: error

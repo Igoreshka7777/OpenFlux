@@ -17,11 +17,7 @@ targets:
     platform: iOS
     sources:
       - path: OpenFlux
-      - path: Lib
-        buildPhase: none
     dependencies:
-      - framework: Lib/liboflux.a
-        embed: false
       - target: OpenFluxTunnel
     info:
       path: OpenFlux/Info.plist
@@ -45,21 +41,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.p1neapplexpress-saharev.openflux
         PRODUCT_NAME: OpenFlux
         INFOPLIST_KEY_CFBundleDisplayName: Igor VPN
-        SWIFT_OBJC_BRIDGING_HEADER: OpenFlux/OpenFlux-Bridging-Header.h
-        SWIFT_VERSION: "5.0"
+        SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        HEADER_SEARCH_PATHS:
-          - "$(SRCROOT)/Lib"
-        LIBRARY_SEARCH_PATHS:
-          - "$(SRCROOT)/Lib"
-        OTHER_LDFLAGS:
-          - "-lresolv"
-          - "-framework"
-          - "CoreFoundation"
-          - "-framework"
-          - "Security"
         CODE_SIGN_STYLE: Automatic
 
   OpenFluxTunnel:
@@ -67,10 +52,8 @@ targets:
     platform: iOS
     sources:
       - path: OpenFluxTunnel
-      - path: Lib
-        buildPhase: none
     dependencies:
-      - framework: Lib/liboflux.a
+      - framework: Lib/OpenFluxWBRuntime.xcframework
         embed: false
     info:
       path: OpenFluxTunnel/Info.plist
@@ -90,13 +73,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.p1neapplexpress-saharev.openflux.tunnel
         PRODUCT_NAME: OpenFluxTunnel
-        SWIFT_OBJC_BRIDGING_HEADER: OpenFluxTunnel/Tunnel-Bridging-Header.h
-        SWIFT_VERSION: "5.0"
+        SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
-        HEADER_SEARCH_PATHS:
-          - "$(SRCROOT)/Lib"
-        LIBRARY_SEARCH_PATHS:
-          - "$(SRCROOT)/Lib"
         OTHER_LDFLAGS:
           - "-lresolv"
           - "-framework"
