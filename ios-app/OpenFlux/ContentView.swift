@@ -15,11 +15,7 @@ private enum Theme {
 struct ContentView: View {
     @StateObject private var vpn = VPNController()
     @AppStorage("mailruURL") private var docURL = ""
-    @AppStorage("autoDetectBlocked") private var autoDetectBlocked = true
-    @AppStorage("vpnDomains") private var vpnDomains = ""
-    @AppStorage("directDomains") private var directDomains = ""
     @State private var showSettings = false
-    @State private var showDirectEditor = false
     @State private var showSupport = false
     @State private var breathe = false
 
@@ -51,12 +47,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear { breathe = true }
         .sheet(isPresented: $showSettings) {
-            SettingsView(docURL: $docURL, autoDetect: $autoDetectBlocked,
-                         vpnDomains: $vpnDomains, directDomains: $directDomains,
-                         vpn: vpn)
-        }
-        .sheet(isPresented: $showDirectEditor) {
-            DomainEditor(title: "Всегда напрямую", text: $directDomains)
+            SettingsView(docURL: $docURL, vpn: vpn)
         }
         .sheet(isPresented: $showSupport) { SupportView() }
     }
@@ -72,12 +63,6 @@ struct ContentView: View {
                 .tracking(2.2)
                 .foregroundColor(.white)
             Spacer()
-            Button { showDirectEditor = true } label: {
-                Image(systemName: "arrow.up.right.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .frame(width: 38, height: 38)
-            }
-            .accessibilityLabel("Сайты напрямую")
             Button { showSettings = true } label: {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 19, weight: .medium))
@@ -146,8 +131,8 @@ struct ContentView: View {
     private var footer: some View {
         VStack(spacing: 18) {
             HStack(spacing: 7) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                Text("Обычный трафик — напрямую")
+                Image(systemName: "lock.shield")
+                Text("Трафик — через VPN")
             }
             .font(.system(size: 12))
             .foregroundColor(Theme.muted.opacity(0.82))
@@ -166,8 +151,7 @@ struct ContentView: View {
         if vpn.active {
             vpn.stop()
         } else if canStart {
-            vpn.start(url: docURL, autoDetect: autoDetectBlocked,
-                      vpnDomains: vpnDomains, directDomains: directDomains)
+            vpn.start(url: docURL)
         } else {
             showSettings = true
         }
@@ -177,12 +161,7 @@ struct ContentView: View {
 private struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var docURL: String
-    @Binding var autoDetect: Bool
-    @Binding var vpnDomains: String
-    @Binding var directDomains: String
     @ObservedObject var vpn: VPNController
-    @State private var showVPNEditor = false
-    @State private var showDirectEditor = false
     @State private var showDiagnostics = false
 
     var body: some View {
@@ -204,25 +183,6 @@ private struct SettingsView: View {
                             Text("Используйте ссылку VPN-узла, а не ссылку пользователя из веб-панели.")
                                 .font(.caption)
                                 .foregroundColor(Theme.muted)
-                        }
-                        card {
-                            Text("МАРШРУТИЗАЦИЯ")
-                                .font(.caption.bold()).tracking(1.8)
-                                .foregroundColor(Theme.orange)
-                            Toggle("Автоматически находить недоступные сайты",
-                                   isOn: $autoDetect)
-                                .tint(Theme.orange)
-                            Text("Остальные сайты открываются напрямую. Проверка доступности может ошибаться — используйте ручные списки.")
-                                .font(.caption)
-                                .foregroundColor(Theme.muted)
-                            Divider().background(Theme.muted)
-                            Button("Всегда через VPN") { showVPNEditor = true }
-                            Button("Всегда напрямую") { showDirectEditor = true }
-                            if vpn.active {
-                                Text("После изменения настроек переподключите VPN.")
-                                    .font(.caption)
-                                    .foregroundColor(Theme.muted)
-                            }
                         }
                         card {
                             Text("ПОМОЩЬ")
@@ -250,12 +210,6 @@ private struct SettingsView: View {
                 }
             }
             .accentColor(Theme.orange)
-            .sheet(isPresented: $showVPNEditor) {
-                DomainEditor(title: "Всегда через VPN", text: $vpnDomains)
-            }
-            .sheet(isPresented: $showDirectEditor) {
-                DomainEditor(title: "Всегда напрямую", text: $directDomains)
-            }
             .sheet(isPresented: $showDiagnostics) {
                 DiagnosticsView(vpn: vpn)
             }
@@ -270,43 +224,6 @@ private struct SettingsView: View {
             .padding(18)
             .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: 18))
-    }
-}
-
-private struct DomainEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    let title: String
-    @Binding var text: String
-
-    var body: some View {
-        NavigationView {
-            ZStack {
-                Theme.background.ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("По одному домену на строку. Поддомены учитываются автоматически.")
-                        .font(.footnote)
-                        .foregroundColor(Theme.muted)
-                    TextEditor(text: $text)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(7)
-                        .background(Theme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(20)
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Готово") { dismiss() }
-                }
-            }
-            .accentColor(Theme.orange)
-        }
-        .navigationViewStyle(.stack)
-        .preferredColorScheme(.dark)
     }
 }
 

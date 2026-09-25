@@ -11,6 +11,9 @@ final class VPNController: ObservableObject {
     private var manager: NETunnelProviderManager?
     private let extensionBundleId = "com.p1neapplexpress-saharev.openflux.tunnel"
     private var logTimer: Timer?
+    private var logRequestInFlight = false
+    private var logRequestID = 0
+    private var lastStatus: NEVPNStatus?
 
     init() {
         NotificationCenter.default.addObserver(
@@ -25,55 +28,90 @@ final class VPNController: ObservableObject {
     deinit { logTimer?.invalidate() }
 
     private func load() async {
-        let managers = (try? await NETunnelProviderManager.loadAllFromPreferences()) ?? []
-        manager = managers.first
+        do {
+            let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+            manager = managers.first { ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+                .providerBundleIdentifier == extensionBundleId }
+            appendLog("[app] Настройки VPN загружены")
+        } catch {
+            appendLog("[app] Ошибка загрузки настроек VPN: \(error.localizedDescription)")
+        }
         refreshStatus()
     }
 
-    func start(url: String, autoDetect: Bool, vpnDomains: String, directDomains: String) {
+    func start(url: String) {
+        appendLog("[app] Подключение запрошено")
         Task {
             let m = manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = extensionBundleId
             proto.serverAddress = "Mail.ru / OpenFlux"
+            proto.disconnectOnSleep = false
             proto.providerConfiguration = [
                 "transport": "mailru",
-                "url": url.trimmingCharacters(in: .whitespacesAndNewlines),
-                "autoDetect": autoDetect,
-                "vpnDomains": vpnDomains,
-                "directDomains": directDomains
+                "url": url.trimmingCharacters(in: .whitespacesAndNewlines)
             ]
             m.protocolConfiguration = proto
             m.localizedDescription = "Igor VPN"
             m.isEnabled = true
+            m.onDemandRules = [NEOnDemandRuleConnect()]
+            m.isOnDemandEnabled = true
             do {
                 try await m.saveToPreferences()
                 try await m.loadFromPreferences()
                 manager = m
                 try m.connection.startVPNTunnel()
+                appendLog("[app] Запуск расширения VPN")
             } catch {
                 status = "Error: \(error.localizedDescription)"
+                appendLog("[app] Ошибка запуска VPN: \(error.localizedDescription)")
             }
         }
     }
 
     func stop() {
         refreshLog()
-        manager?.connection.stopVPNTunnel()
+        appendLog("[app] Отключение запрошено")
+        Task {
+            guard let m = manager else { return }
+            m.isOnDemandEnabled = false
+            do {
+                try await m.saveToPreferences()
+                try await m.loadFromPreferences()
+            } catch {
+                appendLog("[app] Не удалось отключить автоподключение: \(error.localizedDescription)")
+            }
+            m.connection.stopVPNTunnel()
+        }
     }
 
     func refreshLog() {
         guard let session = manager?.connection as? NETunnelProviderSession,
-              session.status == .connected || session.status == .connecting ||
-              session.status == .reasserting else { return }
+              (session.status == .connected || session.status == .connecting ||
+               session.status == .reasserting),
+              !logRequestInFlight else { return }
+        logRequestInFlight = true
+        logRequestID += 1
+        let requestID = logRequestID
         do {
             try session.sendProviderMessage(Data("logs".utf8)) { [weak self] response in
-                guard let response = response,
-                      let chunk = String(data: response, encoding: .utf8),
-                      !chunk.isEmpty else { return }
-                Task { @MainActor in self?.appendLog(chunk) }
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    if self.logRequestID == requestID { self.logRequestInFlight = false }
+                    if let response = response,
+                       let chunk = String(data: response, encoding: .utf8),
+                       !chunk.isEmpty { self.appendLog(chunk) }
+                }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if logRequestInFlight && logRequestID == requestID {
+                    logRequestInFlight = false
+                    appendLog("[app] Расширение VPN не ответило на запрос журнала")
+                }
             }
         } catch {
+            logRequestInFlight = false
             let message = "[app] Не удалось прочитать журнал VPN: \(error.localizedDescription)"
             if !log.hasSuffix(message) { appendLog(message) }
         }
@@ -104,6 +142,11 @@ final class VPNController: ObservableObject {
         case .disconnecting: status = "Disconnecting…"; active = true
         case .reasserting: status = "Reasserting…"; active = true
         default: status = "Disconnected"; active = false
+        }
+        if lastStatus != conn.status {
+            lastStatus = conn.status
+            appendLog("[app] Состояние VPN: \(status)")
+            if conn.status == .connected { refreshLog() }
         }
     }
 }

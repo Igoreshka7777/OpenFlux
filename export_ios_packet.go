@@ -16,9 +16,11 @@ import (
 	"net"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
+	"openflux/iosroute"
 	"openflux/network"
 	"openflux/transport"
 	"openflux/transport/mailru"
@@ -39,19 +41,18 @@ import (
 const tunClientIP = "10.10.10.2"
 
 var (
-	ptMu     sync.Mutex
-	ptOn     bool
-	ptTrans  transport.Transport
-	ptOutQ   chan []byte
-	ptCtx    context.Context
-	ptCancel context.CancelFunc
+	ptMu         sync.Mutex
+	ptOn         bool
+	ptTrans      transport.Transport
+	ptOutQ       chan []byte
+	ptCtx        context.Context
+	ptCancel     context.CancelFunc
+	ptSendErrors atomic.Uint64
 )
 
 //export OpenFluxStartPacketTunnel
-func OpenFluxStartPacketTunnel(url, vpnDomains, directDomains *C.char, automatic C.int) (rc C.int) {
+func OpenFluxStartPacketTunnel(url *C.char) (rc C.int) {
 	docURL := C.GoString(url)
-	vpnText := C.GoString(vpnDomains)
-	directText := C.GoString(directDomains)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -100,10 +101,34 @@ func OpenFluxStartPacketTunnel(url, vpnDomains, directDomains *C.char, automatic
 	ptTrans = t
 	ptOutQ = outQ
 	ptCtx, ptCancel = context.WithCancel(context.Background())
-	configureSplit(vpnText, directText, automatic != 0)
 	ptOn = true
-	log.Printf("[VPN] Соединение Mail.ru готово")
+	log.Printf("[VPN] Соединение Mail.ru готово; весь IPv4 TCP направляется через VPN")
+	go monitorPacketTunnel(ptCtx, t)
 	return C.int(startOK)
+}
+
+func monitorPacketTunnel(ctx context.Context, t transport.Transport) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	wasConnected := true
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			connected := t.IsConnected()
+			if connected != wasConnected {
+				if connected {
+					log.Printf("[VPN] Транспорт восстановлен")
+				} else {
+					log.Printf("[VPN] Транспорт потерял соединение")
+				}
+				wasConnected = connected
+			}
+			s := t.Stats()
+			log.Printf("[VPN] Трафик: отправлено %d, получено %d байт; переподключений %d; ошибок отправки %d", s.BytesSent, s.BytesReceived, s.Reconnects, ptSendErrors.Load())
+		}
+	}
 }
 
 // OpenFluxTunWritePacket forwards one device IPv4 packet: TCP goes over the
@@ -128,7 +153,9 @@ func OpenFluxTunWritePacket(buf *C.char, length C.int) {
 	}
 	switch pkt[9] { // protocol
 	case 6: // TCP
-		t.Send(pkt)
+		if err := t.Send(pkt); err != nil {
+			ptSendErrors.Add(1)
+		}
 	case 17: // UDP
 		ihl := int(pkt[0]&0x0f) * 4
 		if len(pkt) < ihl+8 {
@@ -231,7 +258,6 @@ func OpenFluxStopPacketTunnel() {
 	}
 	ptTrans = nil
 	ptOutQ = nil
-	stopSplit()
 	ptOn = false
 	log.Printf("[VPN] Соединение остановлено")
 }
@@ -258,10 +284,13 @@ func handleDNSPacket(req []byte, outQ chan []byte) {
 		utils.Debugf("[DNS] resolve failed: %v", err)
 		return
 	}
-	answer, ok := routeDNS(query, answer)
-	if !ok {
-		utils.Debugf("[DNS] route could not be installed")
-		return
+	// The current exit handles IPv4 TCP. Suppress IPv6 answers so ordinary
+	// applications retry with IPv4 instead of attempting an unsupported route.
+	if question, err := iosroute.ParseQuestion(query); err == nil && question.Type == 28 {
+		answer, err = iosroute.EmptyAAAA(answer)
+		if err != nil {
+			return
+		}
 	}
 
 	// Build the response: swap addresses/ports (dst<->src), UDP checksum 0.

@@ -2,12 +2,9 @@ import Foundation
 import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-    private let routeQueue = DispatchQueue(label: "igorvpn.routes")
-    private var routeTimer: DispatchSourceTimer?
-    private var routedIPs = Set<String>()
-    private var applyingRoute = false
     private let stateLock = NSLock()
     private var stoppedStorage = false
+
     private var stopped: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return stoppedStorage }
         set { stateLock.lock(); stoppedStorage = newValue; stateLock.unlock() }
@@ -17,50 +14,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                               completionHandler: @escaping (Error?) -> Void) {
         let conf = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
         let url = (conf["url"] as? String) ?? ""
-        let vpnDomains = (conf["vpnDomains"] as? String) ?? ""
-        let directDomains = (conf["directDomains"] as? String) ?? ""
-        let autoDetect = (conf["autoDetect"] as? Bool) ?? true
         stopped = false
-        routedIPs.removeAll()
 
-        // The system route stays direct. Only the local DNS address and
-        // confirmed VPN destination IPs are captured by this extension.
-        setTunnelNetworkSettings(makeSettings()) { error in
+        guard !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            completionHandler(NSError(domain: "IgorVPN", code: 100,
+                userInfo: [NSLocalizedDescriptionKey: "Добавьте ссылку Mail.ru в настройках."]))
+            return
+        }
+
+        setTunnelNetworkSettings(makeSettings()) { [weak self] error in
+            guard let self = self else { return }
             if let error = error {
                 completionHandler(error)
                 return
             }
-            let rc = url.withCString { u in
-                vpnDomains.withCString { vpn in
-                    directDomains.withCString { direct in
-                        OpenFluxStartPacketTunnel(
-                            UnsafeMutablePointer(mutating: u),
-                            UnsafeMutablePointer(mutating: vpn),
-                            UnsafeMutablePointer(mutating: direct),
-                            autoDetect ? 1 : 0)
-                    }
-                }
+            let rc = url.withCString { value in
+                OpenFluxStartPacketTunnel(UnsafeMutablePointer(mutating: value))
             }
             if rc != 0 {
-                completionHandler(NSError(
-                    domain: "IgorVPN", code: Int(rc),
-                    userInfo: [NSLocalizedDescriptionKey: "Не удалось запустить Mail.ru (\(rc))"]))
+                completionHandler(NSError(domain: "IgorVPN", code: Int(rc),
+                    userInfo: [NSLocalizedDescriptionKey: "Не удалось запустить Mail.ru (\(rc)). Откройте диагностику."]))
                 return
             }
             self.startReadLoop()
             self.startWriteLoop()
-            self.startRoutePolling()
             completionHandler(nil)
         }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason,
                              completionHandler: @escaping () -> Void) {
-        routeQueue.sync {
-            stopped = true
-            routeTimer?.cancel()
-            routeTimer = nil
-        }
+        stopped = true
         OpenFluxStopPacketTunnel()
         completionHandler()
     }
@@ -84,57 +68,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
         let ipv4 = NEIPv4Settings(addresses: ["10.10.10.2"],
                                   subnetMasks: ["255.255.255.0"])
-        var routes = [NEIPv4Route(destinationAddress: "198.18.0.1",
-                                  subnetMask: "255.255.255.255")]
-        routes += routedIPs.sorted().map {
-            NEIPv4Route(destinationAddress: $0, subnetMask: "255.255.255.255")
-        }
-        ipv4.includedRoutes = routes
+        ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
+
+        // The exit currently supports IPv4 TCP only. Capture IPv6 so IPv6
+        // literals cannot bypass the VPN; AAAA DNS answers are suppressed.
+        let ipv6 = NEIPv6Settings(addresses: ["fd00:10:10:10::2"],
+                                  networkPrefixLengths: [64])
+        ipv6.includedRoutes = [NEIPv6Route.default()]
+        settings.ipv6Settings = ipv6
+
         settings.mtu = 1500
         let dns = NEDNSSettings(servers: ["198.18.0.1"])
         dns.matchDomains = [""]
         settings.dnsSettings = dns
         return settings
-    }
-
-    private func startRoutePolling() {
-        let timer = DispatchSource.makeTimerSource(queue: routeQueue)
-        timer.schedule(deadline: .now() + .milliseconds(100),
-                       repeating: .milliseconds(100))
-        timer.setEventHandler { [weak self] in self?.takeNextRoute() }
-        routeTimer = timer
-        timer.resume()
-    }
-
-    private func takeNextRoute() {
-        guard !stopped && !applyingRoute else { return }
-        var buffer = [CChar](repeating: 0, count: 64)
-        let count = buffer.withUnsafeMutableBufferPointer { ptr in
-            OpenFluxTunNextRoute(ptr.baseAddress, Int32(ptr.count))
-        }
-        guard count > 0 else { return }
-        let ip = String(cString: buffer)
-        if routedIPs.contains(ip) {
-            ackRoute(ip, success: true)
-            return
-        }
-        applyingRoute = true
-        routedIPs.insert(ip)
-        setTunnelNetworkSettings(makeSettings()) { [weak self] error in
-            guard let self = self else { return }
-            self.routeQueue.async {
-                if error != nil { self.routedIPs.remove(ip) }
-                self.ackRoute(ip, success: error == nil)
-                self.applyingRoute = false
-            }
-        }
-    }
-
-    private func ackRoute(_ ip: String, success: Bool) {
-        ip.withCString { value in
-            OpenFluxTunAckRoute(UnsafeMutablePointer(mutating: value), success ? 1 : 0)
-        }
     }
 
     private func startReadLoop() {
