@@ -123,7 +123,8 @@ final class VPNController: ObservableObject {
     }
 
     private func appendLog(_ chunk: String) {
-        let lines = (log + chunk + "\n").split(separator: "\n", omittingEmptySubsequences: true)
+        let combined = log.isEmpty ? chunk : log + "\n" + chunk
+        let lines = combined.split(separator: "\n", omittingEmptySubsequences: true)
         log = lines.suffix(300).joined(separator: "\n")
         UserDefaults.standard.set(log, forKey: "vpnDiagnosticLog")
     }
