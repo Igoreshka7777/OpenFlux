@@ -44,7 +44,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.p1neapplexpress-saharev.openflux
         PRODUCT_NAME: OpenFlux
-        INFOPLIST_KEY_CFBundleDisplayName: OpenFlux
+        INFOPLIST_KEY_CFBundleDisplayName: Igor VPN
         SWIFT_OBJC_BRIDGING_HEADER: OpenFlux/OpenFlux-Bridging-Header.h
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"

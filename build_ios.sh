@@ -1,54 +1,33 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 OUTPUT_DIR="output/ios"
 LIBRARY_NAME="liboflux"
 
-# Paths configuration
-XCODE_PATH="${XCODE_PATH:-/Applications/Xcode.app}"
-DEVELOPER_DIR="$XCODE_PATH/Contents/Developer"
-SDK_PATH="$DEVELOPER_DIR/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
-CLANG="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+if ! command -v xcrun >/dev/null 2>&1; then
+    echo "Xcode command line tools are required" >&2
+    exit 1
+fi
+
+SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+CLANG="$(xcrun --sdk iphoneos --find clang)"
+CLANGXX="$(xcrun --sdk iphoneos --find clang++)"
+if [ ! -d "$SDK_PATH" ] || [ ! -x "$CLANG" ] || [ ! -x "$CLANGXX" ]; then
+    echo "iPhoneOS SDK or compiler is unavailable" >&2
+    exit 1
+fi
 
 mkdir -p "$OUTPUT_DIR"
-
-# Verify paths
-if [ ! -d "$SDK_PATH" ]; then
-    echo "SDK not found: $SDK_PATH"
-    exit 1
-fi
-
-if [ ! -f "$CLANG" ]; then
-    echo "Compiler not found: $CLANG"
-    exit 1
-fi
-
-# Build environment
 export GOARCH=arm64
 export GOOS=ios
 export CGO_ENABLED=1
-export SDK_PATH="$SDK_PATH"
-export CC="$CLANG -isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=13.0"
-export CXX="${CLANG}++ -isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=13.0"
-export CGO_CFLAGS="-isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=13.0"
-export CGO_LDFLAGS="-isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=13.0"
+export SDK_PATH
+export CC="$CLANG -isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=15.0"
+export CXX="$CLANGXX -isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=15.0"
+export CGO_CFLAGS="-isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=15.0"
+export CGO_LDFLAGS="-isysroot $SDK_PATH -arch arm64 -miphoneos-version-min=15.0"
 
-echo "Building for iOS (arm64)..."
-
-# Build static library
-if go build \
-    -buildmode=c-archive \
-    -ldflags="-w" \
-    -trimpath \
-    -o "$OUTPUT_DIR/$LIBRARY_NAME.a" \
-    . ; then
-    
-    # Header liboflux.h is generated automatically by cgo from //export directives.
-    
-    echo "Build complete: $OUTPUT_DIR/$LIBRARY_NAME.a"
-    ls -lh "$OUTPUT_DIR/$LIBRARY_NAME.a"
-    
-else
-    echo "Build failed"
-    exit 1
-fi
+echo "Building Go static library for iOS arm64..."
+go build -buildmode=c-archive -ldflags="-w" -trimpath -o "$OUTPUT_DIR/$LIBRARY_NAME.a" .
+echo "Build complete: $OUTPUT_DIR/$LIBRARY_NAME.a"
+ls -lh "$OUTPUT_DIR/$LIBRARY_NAME.a"

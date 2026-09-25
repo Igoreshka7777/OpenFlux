@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -154,7 +155,7 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 
 		info, err := t.fetchDocInfo(t.weblink)
 		if err != nil {
-			utils.Debugf("[M-DOCS] fetchDocInfo failed: %v", err)
+			log.Printf("[Mail.ru] Ошибка открытия документа: %v", err)
 			t.scheduleReconnect(attempt)
 			return
 		}
@@ -177,7 +178,7 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 			if resp != nil {
 				status = resp.StatusCode
 			}
-			utils.Debugf("[M-DOCS] WebSocket dial failed (http %d): %v", status, err)
+			log.Printf("[Mail.ru] Ошибка WebSocket (HTTP %d): %v", status, err)
 			t.scheduleReconnect(attempt)
 			return
 		}
@@ -197,28 +198,21 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 
 		t.Mu.Lock()
 		t.session = session
-		t.SetConnected(true)
+		t.SetConnected(false)
 		t.Mu.Unlock()
 
 		if existingSession == nil {
 			utils.SafeGo("mailru.writer", t.writerLoop)
 		}
 
-		// Auth - fired immediately, same as the Yandex.Docs transport. No
-		// need to wait for the server's own "0{"/"40" handshake frames
-		// first: Mail.ru's coauthoring server buffers and processes these
-		// once its own session state catches up, and waiting for explicit
-		// acks here only stretches the outage window on every reconnect
-		// (Mail.ru can delay a fresh joiner's auth confirmation by up to
-		// ~30s while it reconciles with the other participant).
+		// Wait for Engine.IO open and Socket.IO namespace acknowledgement.
 		auth1 := fmt.Sprintf(`40{"token":"%s"}`, info.Token)
-		session.safeWrite(websocket.TextMessage, []byte(auth1))
 
 		authMsg := map[string]interface{}{
 			"type":                "auth",
 			"docid":               info.DocKey,
 			"documentCallbackUrl": info.CallbackURL,
-			"token":               "fghhfgsjdgfjs",
+			"token":               info.Token,
 			"user": map[string]interface{}{
 				"id":        info.EditorUserID,
 				"username":  userID,
@@ -252,13 +246,14 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 			"supportAuthChangesAck": true,
 		}
 		messagePart, _ := json.Marshal([]interface{}{"message", authMsg})
-		session.safeWrite(websocket.TextMessage, []byte(fmt.Sprintf("42%s", string(messagePart))))
+		authFrame := append([]byte("42"), messagePart...)
 
 		connectedAt := time.Now()
+		authStage := 0
 		for t.IsRunning() {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				utils.Debugf("[M-DOCS] Read error: %v", err)
+				log.Printf("[Mail.ru] Соединение прервалось: %v", err)
 				t.SetConnected(false)
 				conn.Close()
 
@@ -268,6 +263,24 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 				}
 				t.scheduleReconnect(next)
 				return
+			}
+			if authStage == 0 && len(message) > 0 && message[0] == '0' {
+				if err := session.safeWrite(websocket.TextMessage, []byte(auth1)); err != nil {
+					utils.Debugf("[M-DOCS] namespace connect failed: %v", err)
+					conn.Close()
+					continue
+				}
+				authStage = 1
+				continue
+			}
+			if authStage == 1 && bytes.HasPrefix(message, []byte("400")) {
+				if err := session.safeWrite(websocket.TextMessage, authFrame); err != nil {
+					utils.Debugf("[M-DOCS] auth send failed: %v", err)
+					conn.Close()
+					continue
+				}
+				authStage = 2
+				continue
 			}
 			t.handleMessage(session, message)
 		}
@@ -305,7 +318,7 @@ func (t *MailruDocsTransport) writerLoop() {
 		t.Mu.RLock()
 		session := t.session
 		t.Mu.RUnlock()
-		if session == nil || session.Conn == nil {
+		if session == nil || session.Conn == nil || !t.IsConnected() {
 			// Mid-reconnect: hold the packet and retry rather than drop it.
 			time.Sleep(15 * time.Millisecond)
 			continue
@@ -333,7 +346,7 @@ func (t *MailruDocsTransport) keepAliveLoop() {
 		session := t.session
 		t.Mu.Unlock()
 
-		if session != nil && session.Conn != nil {
+		if session != nil && session.Conn != nil && t.IsConnected() {
 			if err := session.safeWrite(websocket.TextMessage, []byte(keepAliveMsg)); err != nil {
 				utils.Debugf("[M-DOCS] Keep-alive failed: %v", err)
 				t.SetConnected(false)
@@ -361,7 +374,8 @@ func (t *MailruDocsTransport) handleMessage(session *DocSession, data []byte) {
 	}
 
 	if strings.Contains(text, `"type":"auth"`) && strings.Contains(text, `"result":1`) {
-		utils.Debugf("[M-DOCS] Auth OK for user %s", session.UserID)
+		t.SetConnected(true)
+		log.Printf("[Mail.ru] Авторизация подтверждена")
 		return
 	}
 

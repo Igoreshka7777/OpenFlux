@@ -1,206 +1,422 @@
 import SwiftUI
+import UIKit
+
+private enum Theme {
+    static let background = Color(red: 0.018, green: 0.016, blue: 0.018)
+    static let card = Color(red: 0.085, green: 0.079, blue: 0.085)
+    static let muted = Color(red: 0.58, green: 0.56, blue: 0.58)
+    static let orange = Color(red: 1.0, green: 0.54, blue: 0.08)
+    static let red = Color(red: 0.92, green: 0.16, blue: 0.13)
+    static let ring = AngularGradient(
+        colors: [orange, Color(red: 1.0, green: 0.36, blue: 0.05), red, orange],
+        center: .center, startAngle: .degrees(-90), endAngle: .degrees(270))
+}
 
 struct ContentView: View {
-    @StateObject private var tunnel = TunnelController()
     @StateObject private var vpn = VPNController()
-
-    @AppStorage("transportKind") private var transportRaw: String = TransportKind.yandex.rawValue
-    @AppStorage("docURL") private var docURL: String = ""
-    @AppStorage("maxToken") private var maxToken: String = ""
-    @AppStorage("maxUid") private var maxUid: String = ""
-    // Uncommon default port to avoid clashing with other local proxies.
-    @AppStorage("socksPort") private var socksPort: String = "10808"
-    @AppStorage("debugLog") private var debugLog: Bool = false
-    @State private var showInfo = false
-
-    private var transport: TransportKind {
-        TransportKind(rawValue: transportRaw) ?? .yandex
-    }
+    @AppStorage("mailruURL") private var docURL = ""
+    @AppStorage("autoDetectBlocked") private var autoDetectBlocked = true
+    @AppStorage("vpnDomains") private var vpnDomains = ""
+    @AppStorage("directDomains") private var directDomains = ""
+    @State private var showSettings = false
+    @State private var showDirectEditor = false
+    @State private var showSupport = false
+    @State private var breathe = false
 
     private var canStart: Bool {
-        guard (Int(socksPort) ?? 0) > 0 else { return false }
-        switch transport {
-        case .yandex: return !docURL.trimmingCharacters(in: .whitespaces).isEmpty
-        case .max:    return !maxToken.isEmpty && !maxUid.isEmpty
-        }
+        !docURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isConnecting: Bool {
+        vpn.active && vpn.status != "Connected"
     }
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 16) {
-                    statusHeader
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            RadialGradient(colors: [Theme.red.opacity(vpn.active ? 0.11 : 0.045), .clear],
+                           center: .center, startRadius: 30, endRadius: 300)
+                .ignoresSafeArea()
+            VStack(spacing: 0) {
+                header
+                Spacer(minLength: 30)
+                connectionControl
+                Spacer(minLength: 30)
+                footer
+            }
+            .padding(.horizontal, 26)
+            .padding(.top, 18)
+            .padding(.bottom, 22)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear { breathe = true }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(docURL: $docURL, autoDetect: $autoDetectBlocked,
+                         vpnDomains: $vpnDomains, directDomains: $directDomains,
+                         vpn: vpn)
+        }
+        .sheet(isPresented: $showDirectEditor) {
+            DomainEditor(title: "Всегда напрямую", text: $directDomains)
+        }
+        .sheet(isPresented: $showSupport) { SupportView() }
+    }
 
-                    Picker("Transport", selection: $transportRaw) {
-                        ForEach(TransportKind.allCases) { t in
-                            Text(t.title).tag(t.rawValue)
+    private var header: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Theme.ring)
+                .frame(width: 11, height: 11)
+                .shadow(color: Theme.orange.opacity(0.7), radius: 8)
+            Text("IGOR VPN")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .tracking(2.2)
+                .foregroundColor(.white)
+            Spacer()
+            Button { showDirectEditor = true } label: {
+                Image(systemName: "arrow.up.right.circle")
+                    .font(.system(size: 20, weight: .medium))
+                    .frame(width: 38, height: 38)
+            }
+            .accessibilityLabel("Сайты напрямую")
+            Button { showSettings = true } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 19, weight: .medium))
+                    .frame(width: 38, height: 38)
+            }
+            .accessibilityLabel("Настройки")
+        }
+        .foregroundColor(Theme.muted)
+        .buttonStyle(.plain)
+    }
+
+    private var connectionControl: some View {
+        VStack(spacing: 0) {
+            Button(action: toggleVPN) {
+                ZStack {
+                    Circle()
+                        .stroke(Theme.ring, lineWidth: 15)
+                        .frame(width: 160, height: 160)
+                        .blur(radius: 19)
+                        .opacity(vpn.active ? 0.38 : 0.20)
+                    Circle()
+                        .stroke(Theme.ring,
+                                style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .frame(width: 150, height: 150)
+                        .shadow(color: Theme.orange.opacity(0.32), radius: 15)
+                    Circle()
+                        .fill(Theme.background)
+                        .frame(width: 136, height: 136)
+                    Image(systemName: "power")
+                        .font(.system(size: 31, weight: .ultraLight))
+                        .foregroundColor(vpn.active ? Theme.orange : Theme.muted.opacity(0.72))
+                }
+                .frame(width: 190, height: 190)
+                .contentShape(Circle())
+                .scaleEffect(breathe ? 1.025 : 0.985)
+                .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true),
+                           value: breathe)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(vpn.active ? "Отключить VPN" : "Подключить VPN")
+
+            Text(vpn.status == "Connected" ? "ПОДКЛЮЧЕНО" :
+                 (isConnecting ? "ПОДКЛЮЧЕНИЕ…" : "НЕ ПОДКЛЮЧЕНО"))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .tracking(2.8)
+                .foregroundColor(vpn.status == "Connected" ? Theme.orange : .white)
+                .padding(.top, 32)
+            Text(canStart ? "Нажмите на круг, чтобы \(vpn.active ? "отключить" : "подключить") VPN" :
+                 "Добавьте ссылку Mail.ru в настройках")
+                .font(.system(size: 13))
+                .foregroundColor(Theme.muted)
+                .multilineTextAlignment(.center)
+                .padding(.top, 9)
+            if vpn.status.hasPrefix("Error:") {
+                Text(vpn.status)
+                    .font(.footnote)
+                    .foregroundColor(Theme.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 16)
+                    .padding(.horizontal, 20)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var footer: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 7) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                Text("Обычный трафик — напрямую")
+            }
+            .font(.system(size: 12))
+            .foregroundColor(Theme.muted.opacity(0.82))
+            Button { showSupport = true } label: {
+                Label("Поддержать проект", systemImage: "heart")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func toggleVPN() {
+        if vpn.active {
+            vpn.stop()
+        } else if canStart {
+            vpn.start(url: docURL, autoDetect: autoDetectBlocked,
+                      vpnDomains: vpnDomains, directDomains: directDomains)
+        } else {
+            showSettings = true
+        }
+    }
+}
+
+private struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var docURL: String
+    @Binding var autoDetect: Bool
+    @Binding var vpnDomains: String
+    @Binding var directDomains: String
+    @ObservedObject var vpn: VPNController
+    @State private var showVPNEditor = false
+    @State private var showDirectEditor = false
+    @State private var showDiagnostics = false
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        card {
+                            Text("ПОДКЛЮЧЕНИЕ")
+                                .font(.caption.bold()).tracking(1.8)
+                                .foregroundColor(Theme.orange)
+                            TextField("Ссылка на документ Mail.ru", text: $docURL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.URL)
+                                .textFieldStyle(.roundedBorder)
+                                .disabled(vpn.active)
+                            Text("Используйте ссылку VPN-узла, а не ссылку пользователя из веб-панели.")
+                                .font(.caption)
+                                .foregroundColor(Theme.muted)
+                        }
+                        card {
+                            Text("МАРШРУТИЗАЦИЯ")
+                                .font(.caption.bold()).tracking(1.8)
+                                .foregroundColor(Theme.orange)
+                            Toggle("Автоматически находить недоступные сайты",
+                                   isOn: $autoDetect)
+                                .tint(Theme.orange)
+                            Text("Остальные сайты открываются напрямую. Проверка доступности может ошибаться — используйте ручные списки.")
+                                .font(.caption)
+                                .foregroundColor(Theme.muted)
+                            Divider().background(Theme.muted)
+                            Button("Всегда через VPN") { showVPNEditor = true }
+                            Button("Всегда напрямую") { showDirectEditor = true }
+                            if vpn.active {
+                                Text("После изменения настроек переподключите VPN.")
+                                    .font(.caption)
+                                    .foregroundColor(Theme.muted)
+                            }
+                        }
+                        card {
+                            Text("ПОМОЩЬ")
+                                .font(.caption.bold()).tracking(1.8)
+                                .foregroundColor(Theme.orange)
+                            Button {
+                                vpn.refreshLog()
+                                showDiagnostics = true
+                            } label: {
+                                Label("Диагностика и логи", systemImage: "waveform.path.ecg")
+                            }
+                            Text("Журнал VPN хранится на этом iPhone.")
+                                .font(.caption)
+                                .foregroundColor(Theme.muted)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .disabled(tunnel.running)
-
-                    connectionFields
-
-                    portField
-
-                    controls
-
-                    vpnSection
-
-                    logView
+                    .padding(20)
                 }
-                .padding()
             }
-            .navigationTitle("OpenFlux")
-            .onAppear { OpenFluxSetDebug(debugLog ? 1 : 0) }
+            .navigationTitle("Настройки")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showInfo = true } label: {
-                        Image(systemName: "info.circle")
-                    }
+                    Button("Готово") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showInfo) { InfoView() }
+            .accentColor(Theme.orange)
+            .sheet(isPresented: $showVPNEditor) {
+                DomainEditor(title: "Всегда через VPN", text: $vpnDomains)
+            }
+            .sheet(isPresented: $showDirectEditor) {
+                DomainEditor(title: "Всегда напрямую", text: $directDomains)
+            }
+            .sheet(isPresented: $showDiagnostics) {
+                DiagnosticsView(vpn: vpn)
+            }
         }
         .navigationViewStyle(.stack)
+        .preferredColorScheme(.dark)
     }
 
-    @ViewBuilder
-    private var connectionFields: some View {
-        switch transport {
-        case .yandex:
-            field(title: "Yandex Docs URL",
-                  placeholder: "https://docs.yandex.ru/docs/view?url=...",
-                  text: $docURL)
-        case .max:
-            field(title: "MAX token", placeholder: "auth token", text: $maxToken)
-            field(title: "MAX user ID", placeholder: "numeric id", text: $maxUid,
-                  keyboard: .numberPad)
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 15, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+private struct DomainEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    @Binding var text: String
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("По одному домену на строку. Поддомены учитываются автоматически.")
+                        .font(.footnote)
+                        .foregroundColor(Theme.muted)
+                    TextEditor(text: $text)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(7)
+                        .background(Theme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(20)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Готово") { dismiss() }
+                }
+            }
+            .accentColor(Theme.orange)
         }
+        .navigationViewStyle(.stack)
+        .preferredColorScheme(.dark)
     }
+}
 
-    private var portField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Local SOCKS5 port").font(.caption).foregroundColor(.secondary)
-            TextField("10808", text: $socksPort)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-                .disabled(tunnel.running)
-        }
-    }
+private struct DiagnosticsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var vpn: VPNController
 
-    private var controls: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                if tunnel.running {
-                    Button(role: .destructive) { tunnel.stop() } label: {
-                        Label("Stop", systemImage: "stop.fill").frame(maxWidth: .infinity)
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        Text(vpn.status == "Connected" ? "VPN подключён" : "VPN выключен")
+                            .foregroundColor(Theme.muted)
+                        Spacer()
+                        Button { vpn.refreshLog() } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .accessibilityLabel("Обновить логи")
+                        Button { UIPasteboard.general.string = vpn.log } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .accessibilityLabel("Скопировать логи")
                     }
-                    .buttonStyle(.borderedProminent)
-                } else {
+                    .font(.footnote)
+                    ScrollViewReader { reader in
+                        ScrollView {
+                            Text(vpn.log.isEmpty ? "Пока нет событий VPN" : vpn.log)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(vpn.log.isEmpty ? Theme.muted : .white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                                .id("logEnd")
+                        }
+                        .onChange(of: vpn.log) { _ in
+                            reader.scrollTo("logEnd", anchor: .bottom)
+                        }
+                    }
+                    .padding(14)
+                    .background(Theme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    Button("Очистить журнал") { vpn.clearLog() }
+                        .font(.footnote)
+                        .foregroundColor(Theme.muted)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(20)
+            }
+            .navigationTitle("Диагностика")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Готово") { dismiss() }
+                }
+            }
+            .accentColor(Theme.orange)
+        }
+        .navigationViewStyle(.stack)
+        .preferredColorScheme(.dark)
+        .onAppear { vpn.refreshLog() }
+    }
+}
+
+private struct SupportView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+    private let phone = "89126438781"
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                VStack(spacing: 18) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(Theme.red)
+                    Text("Поддержать проект")
+                        .font(.title2.bold())
+                    Text("ОТП Банк")
+                        .foregroundColor(Theme.muted)
                     Button {
-                        tunnel.start(transport: transport,
-                                     url: docURL,
-                                     maxToken: maxToken,
-                                     maxUid: maxUid,
-                                     port: Int(socksPort) ?? 10808)
+                        UIPasteboard.general.string = phone
+                        copied = true
                     } label: {
-                        Label("Start", systemImage: "play.fill").frame(maxWidth: .infinity)
+                        Label(phone, systemImage: "doc.on.doc")
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 14)
+                            .background(Theme.ring)
+                            .clipShape(Capsule())
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canStart)
+                    .buttonStyle(.plain)
+                    if copied { Text("Номер скопирован").foregroundColor(Theme.orange) }
+                    Spacer()
                 }
-                Button { tunnel.testThroughProxy() } label: {
-                    Label("Test", systemImage: "network").frame(maxWidth: .infinity)
+                .padding(.top, 56)
+            }
+            .navigationTitle("Поддержка")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Закрыть") { dismiss() }
                 }
-                .buttonStyle(.bordered)
-                .disabled(!tunnel.running)
             }
-            if tunnel.running {
-                Text("SOCKS5 proxy: \(tunnel.socksAddr)")
-                    .font(.footnote).foregroundColor(.secondary)
-            }
+            .accentColor(Theme.orange)
         }
-    }
-
-    private var vpnSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            HStack {
-                Text("System VPN (all traffic)").font(.subheadline).bold()
-                Spacer()
-                Text(vpn.status).font(.caption).foregroundColor(.secondary)
-            }
-            if vpn.active {
-                Button(role: .destructive) { vpn.stop() } label: {
-                    Label("Stop VPN", systemImage: "bolt.slash.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Button {
-                    vpn.start(transport: transport.rawValue, url: docURL,
-                              maxToken: maxToken, maxUid: maxUid)
-                } label: {
-                    Label("Start VPN", systemImage: "bolt.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canStart)
-            }
-            Text("Routes the whole device through the exit node (TCP + DNS-over-TCP).")
-                .font(.caption2).foregroundColor(.secondary)
-        }
-    }
-
-    private func field(title: String, placeholder: String, text: Binding<String>,
-                       keyboard: UIKeyboardType = .default) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundColor(.secondary)
-            TextField(placeholder, text: text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .keyboardType(keyboard)
-                .textFieldStyle(.roundedBorder)
-                .disabled(tunnel.running)
-        }
-    }
-
-    private var statusHeader: some View {
-        HStack {
-            Circle()
-                .fill(tunnel.connected ? Color.green : (tunnel.running ? Color.orange : Color.gray))
-                .frame(width: 12, height: 12)
-            Text(tunnel.connected ? "Connected" : (tunnel.running ? "Connecting…" : "Stopped"))
-                .font(.headline)
-            Spacer()
-        }
-    }
-
-    private var logView: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle(isOn: $debugLog) {
-                Text("Verbose log").font(.caption).foregroundColor(.secondary)
-            }
-            .onChange(of: debugLog) { on in OpenFluxSetDebug(on ? 1 : 0) }
-            Text("Log").font(.caption).foregroundColor(.secondary)
-            ScrollViewReader { proxy in
-                ScrollView {
-                    Text(tunnel.log.isEmpty ? "—" : tunnel.log)
-                        .font(.system(.caption2, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .id("logtail")
-                }
-                .onChange(of: tunnel.log) { _ in
-                    withAnimation { proxy.scrollTo("logtail", anchor: .bottom) }
-                }
-            }
-            .frame(height: 240)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
+        .navigationViewStyle(.stack)
+        .preferredColorScheme(.dark)
     }
 }
 
-#Preview {
-    ContentView()
-}
+#Preview { ContentView() }

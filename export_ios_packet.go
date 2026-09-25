@@ -12,17 +12,16 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"io"
+	"log"
 	"net"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"time"
 	"unsafe"
 
 	"openflux/network"
 	"openflux/transport"
-	"openflux/transport/oneme"
-	"openflux/transport/yandex"
+	"openflux/transport/mailru"
 	"openflux/utils"
 )
 
@@ -49,11 +48,10 @@ var (
 )
 
 //export OpenFluxStartPacketTunnel
-func OpenFluxStartPacketTunnel(transportType, url, maxToken, maxUid *C.char) (rc C.int) {
-	tt := C.GoString(transportType)
+func OpenFluxStartPacketTunnel(url, vpnDomains, directDomains *C.char, automatic C.int) (rc C.int) {
 	docURL := C.GoString(url)
-	mToken := C.GoString(maxToken)
-	mUid := C.GoString(maxUid)
+	vpnText := C.GoString(vpnDomains)
+	directText := C.GoString(directDomains)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -72,17 +70,9 @@ func OpenFluxStartPacketTunnel(transportType, url, maxToken, maxUid *C.char) (rc
 	debug.SetMemoryLimit(40 << 20)
 	debug.SetGCPercent(20)
 
+	log.Printf("[VPN] Подключение к Mail.ru")
 	config := transport.DefaultConfig()
-	var t transport.Transport
-	switch tt {
-	case "yandex", "":
-		t = transport.NewCompressedTransport(yandex.NewYandexDocsTransport(docURL, config))
-	case "oneme":
-		uidint, _ := strconv.ParseInt(mUid, 10, 64)
-		t = transport.NewCompressedTransport(oneme.NewOneMeTransport(false, mToken, uidint, config))
-	default:
-		return C.int(startBadTransport)
-	}
+	t := transport.NewCompressedTransport(mailru.NewMailruDocsTransport(docURL, config))
 
 	outQ := make(chan []byte, 1024)
 	// Packets coming back from the exit node -> queue for the device.
@@ -94,15 +84,25 @@ func OpenFluxStartPacketTunnel(transportType, url, maxToken, maxUid *C.char) (rc
 	})
 
 	if err := t.Start(); err != nil {
-		utils.Debugf("[PKT] transport start failed: %v", err)
+		log.Printf("[VPN] Ошибка транспорта: %v", err)
+		return C.int(startTransportError)
+	}
+	deadline := time.Now().Add(12 * time.Second)
+	for !t.IsConnected() && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !t.IsConnected() {
+		log.Printf("[VPN] Mail.ru не подтвердил соединение за 12 секунд")
+		t.Stop()
 		return C.int(startTransportError)
 	}
 
 	ptTrans = t
 	ptOutQ = outQ
 	ptCtx, ptCancel = context.WithCancel(context.Background())
+	configureSplit(vpnText, directText, automatic != 0)
 	ptOn = true
-	utils.Debugf("[PKT] L3 packet tunnel started (transport %s)", tt)
+	log.Printf("[VPN] Соединение Mail.ru готово")
 	return C.int(startOK)
 }
 
@@ -173,8 +173,8 @@ func sendICMPPortUnreachable(orig []byte, outQ chan []byte) {
 	ip := make([]byte, total)
 	ip[0] = 0x45
 	binary.BigEndian.PutUint16(ip[2:4], uint16(total))
-	ip[8] = 64 // TTL
-	ip[9] = 1  // ICMP
+	ip[8] = 64                   // TTL
+	ip[9] = 1                    // ICMP
 	copy(ip[12:16], orig[16:20]) // src = original destination
 	copy(ip[16:20], orig[12:16]) // dst = original source (the device)
 	ck2 := network.IPChecksum(ip[:20])
@@ -231,8 +231,9 @@ func OpenFluxStopPacketTunnel() {
 	}
 	ptTrans = nil
 	ptOutQ = nil
+	stopSplit()
 	ptOn = false
-	utils.Debugf("[PKT] L3 packet tunnel stopped")
+	log.Printf("[VPN] Соединение остановлено")
 }
 
 // handleDNSPacket answers a device DNS query over DNS-over-TLS and enqueues a
@@ -257,6 +258,11 @@ func handleDNSPacket(req []byte, outQ chan []byte) {
 		utils.Debugf("[DNS] resolve failed: %v", err)
 		return
 	}
+	answer, ok := routeDNS(query, answer)
+	if !ok {
+		utils.Debugf("[DNS] route could not be installed")
+		return
+	}
 
 	// Build the response: swap addresses/ports (dst<->src), UDP checksum 0.
 	udpLen := 8 + len(answer)
@@ -266,8 +272,8 @@ func handleDNSPacket(req []byte, outQ chan []byte) {
 	resp[0] = req[0]
 	resp[1] = req[1]
 	binary.BigEndian.PutUint16(resp[2:4], uint16(total))
-	resp[8] = 64 // TTL
-	resp[9] = 17 // UDP
+	resp[8] = 64              // TTL
+	resp[9] = 17              // UDP
 	copy(resp[12:16], dstIP)  // src = original destination (the resolver)
 	copy(resp[16:20], srcIP)  // dst = the device
 	resp[10], resp[11] = 0, 0 // checksum field
