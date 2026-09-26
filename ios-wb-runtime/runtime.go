@@ -82,6 +82,11 @@ func (r *Runtime) startCore(cfg configuration) error {
 }
 
 func configureCore(core *olcmobile.Runtime, cfg configuration) error {
+	// Use Yandex Basic DNS for the transport's own bootstrap requests.
+	// This does not change the virtual mapDNS used for tunneled app traffic.
+	if err := core.SetDNS("77.88.8.8:53"); err != nil {
+		return fmt.Errorf("configure Yandex DNS: %w", err)
+	}
 	if err := core.SetProvider(cfg.Node.Provider); err != nil {
 		return err
 	}
