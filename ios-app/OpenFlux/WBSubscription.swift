@@ -9,7 +9,7 @@ enum WBSubscriptionError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Ссылка подписки должна начинаться с https://"
+        case .invalidURL: return "Вставьте HTTPS-подписку или прямую ссылку olcrtc://wbstream"
         case .invalidResponse: return "Не удалось загрузить подписку"
         case .tooLarge: return "Файл подписки слишком большой"
         case .missingNode: return "В подписке нет узла WB Stream"
@@ -20,7 +20,11 @@ enum WBSubscriptionError: LocalizedError {
 
 enum WBSubscription {
     static func load(_ link: String) async throws -> [String: Any] {
-        guard let url = URL(string: link.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let input = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        if input.hasPrefix("olcrtc://wbstream?") {
+            return try parse(input)
+        }
+        guard let url = URL(string: input),
               url.scheme?.lowercased() == "https", url.host != nil else {
             throw WBSubscriptionError.invalidURL
         }

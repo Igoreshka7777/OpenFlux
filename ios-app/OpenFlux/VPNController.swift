@@ -97,10 +97,12 @@ final class VPNController: ObservableObject {
         defer { connecting = false }
         let generation = connectionGeneration
         do {
-            appendLog("[app] Загрузка подписки WB Stream")
+            let directLink = subscriptionURL.hasPrefix("olcrtc://wbstream?")
+            appendLog(directLink ? "[app] Проверка прямой ссылки WB Stream" :
+                "[app] Загрузка HTTPS-подписки WB Stream")
             let node = try await WBSubscription.load(subscriptionURL)
             guard desiredRunning, generation == connectionGeneration else { return }
-            appendLog("[app] Подписка загружена; сохраняю настройки VPN")
+            appendLog("[app] Ссылка WB Stream принята; сохраняю настройки VPN")
             let m = manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = extensionBundleId
