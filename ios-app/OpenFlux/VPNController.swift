@@ -17,11 +17,14 @@ final class VPNController: ObservableObject {
     private var logTimer: Timer?
     private var logRequestInFlight = false
     private var logRequestID = 0
+    private var providerReplied = false
     private var lastStatus: NEVPNStatus?
+    private var connectedAt: Date?
     private var manualStopPending = false
     private var diagnosticsOpen = false
     private var desiredRunning = false
     private var subscriptionURL = ""
+    private var configuredSubscriptionURL: String?
     private var reconnectAttempts = 0
     private var reconnectTask: Task<Void, Never>?
     private var reconnectGeneration = 0
@@ -33,8 +36,11 @@ final class VPNController: ObservableObject {
             self, selector: #selector(statusChanged),
             name: .NEVPNStatusDidChange, object: nil)
         Task { await load() }
-        logTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshLog() }
+        logTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.diagnosticsOpen || self.status == "Connecting…" else { return }
+                self.refreshLog()
+            }
         }
     }
 
@@ -72,6 +78,8 @@ final class VPNController: ObservableObject {
         desiredRunning = true
         subscriptionURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         reconnectAttempts = 0
+        connectedAt = nil
+        providerReplied = false
         reconnectGeneration += 1
         connectionGeneration += 1
         reconnectTask?.cancel()
@@ -102,6 +110,16 @@ final class VPNController: ObservableObject {
                 "[app] Загрузка HTTPS-подписки WB Stream")
             let node = try await WBSubscription.load(subscriptionURL)
             guard desiredRunning, generation == connectionGeneration else { return }
+            if configuredSubscriptionURL == subscriptionURL,
+                let m = manager, m.isEnabled, m.isOnDemandEnabled {
+                if m.connection.status == .disconnected || m.connection.status == .invalid {
+                    try m.connection.startVPNTunnel()
+                    appendLog("[app] Повторный запуск VPN без пересохранения настроек")
+                } else {
+                    appendLog("[app] VPN уже запускается; повторный запуск пропущен")
+                }
+                return
+            }
             appendLog("[app] Ссылка WB Stream принята; сохраняю настройки VPN")
             let m = manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
@@ -122,8 +140,14 @@ final class VPNController: ObservableObject {
             try await m.loadFromPreferences()
             guard desiredRunning, generation == connectionGeneration else { return }
             manager = m
-            try m.connection.startVPNTunnel()
-            appendLog("[app] Запуск расширения VPN через WB Stream")
+            configuredSubscriptionURL = subscriptionURL
+            if m.connection.status == .connecting || m.connection.status == .connected ||
+                m.connection.status == .reasserting {
+                appendLog("[app] VPN уже запускается системой; повторный запуск пропущен")
+            } else {
+                try m.connection.startVPNTunnel()
+                appendLog("[app] Запуск расширения VPN через WB Stream")
+            }
         } catch {
             guard desiredRunning, generation == connectionGeneration else { return }
             appendLog("[app] Ошибка подключения: \(error.localizedDescription)")
@@ -141,7 +165,7 @@ final class VPNController: ObservableObject {
     private func scheduleReconnect() {
         guard desiredRunning, reconnectTask == nil else { return }
         reconnectAttempts = min(reconnectAttempts + 1, 7)
-        let seconds = min(60, 1 << min(reconnectAttempts, 6))
+        let seconds = min(60, 5 * (1 << min(reconnectAttempts - 1, 4)))
         reconnectGeneration += 1
         let generation = reconnectGeneration
         status = "Reconnecting…"
@@ -164,6 +188,7 @@ final class VPNController: ObservableObject {
 
     func stop() {
         manualStopPending = true
+        connectedAt = nil
         desiredRunning = false
         reconnectGeneration += 1
         connectionGeneration += 1
@@ -200,13 +225,17 @@ final class VPNController: ObservableObject {
                 Task { @MainActor in
                     guard let self = self else { return }
                     if self.logRequestID == requestID { self.logRequestInFlight = false }
+                    if response != nil && !self.providerReplied {
+                        self.providerReplied = true
+                        self.appendLog("[app] Расширение VPN ответило на запрос диагностики")
+                    }
                     if let response = response,
                        let chunk = String(data: response, encoding: .utf8),
                        !chunk.isEmpty { self.appendLog(chunk) }
                 }
             }
             Task {
-                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if logRequestInFlight && logRequestID == requestID {
                     logRequestInFlight = false
                     appendLog("[app] Расширение VPN не ответило на запрос журнала")
@@ -260,12 +289,16 @@ final class VPNController: ObservableObject {
             if conn.status == .connected {
                 lastError = nil
                 manualStopPending = false
-                reconnectAttempts = 0
+                connectedAt = Date()
                 reconnectTask?.cancel()
                 reconnectTask = nil
                 if diagnosticsOpen { setVerboseLogging(true) }
                 refreshLog()
             } else if conn.status == .disconnected || conn.status == .invalid {
+                if let connectedAt, Date().timeIntervalSince(connectedAt) >= 15 {
+                    reconnectAttempts = 0
+                }
+                connectedAt = nil
                 let unexpected = !manualStopPending &&
                     (previousStatus == .connecting || previousStatus == .connected ||
                      previousStatus == .reasserting || previousStatus == .disconnecting)

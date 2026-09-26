@@ -55,7 +55,8 @@ public final class TunnelSupervisor: NSObject, @unchecked Sendable {
   }
 
   public static func networkSettings() -> NEPacketTunnelNetworkSettings {
-    let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: TunnelConstants.tunnelAddress)
+    let settings = NEPacketTunnelNetworkSettings(
+      tunnelRemoteAddress: TunnelConstants.tunnelRemoteAddress)
     settings.mtu = TunnelConstants.mtu as NSNumber
 
     let ipv4 = NEIPv4Settings(
@@ -254,6 +255,8 @@ extension TunnelSupervisor: RuntimebridgeRuntimeObserverProtocol {
 private enum TunnelConstants {
   static let configurationVersion = 3
   static let tunnelAddress = "198.18.0.1"
+  // The remote endpoint must not be the address assigned to the TUN interface.
+  static let tunnelRemoteAddress = "198.18.0.254"
   static let tunnelSubnetMask = "255.255.255.0"
   static let mapDNSAddress = "198.18.0.2"
   static let mapDNSNetwork = "100.64.0.0"
