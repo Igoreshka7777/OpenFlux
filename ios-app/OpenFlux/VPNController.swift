@@ -253,6 +253,10 @@ final class VPNController: ObservableObject {
     }
 
     private func readLastDisconnectError(from connection: NEVPNConnection) {
+        guard #available(iOS 16.0, *) else {
+            appendLog("[system] VPN disconnected; detailed system error requires iOS 16")
+            return
+        }
         connection.fetchLastDisconnectError { [weak self] error in
             Task { @MainActor in
                 guard let self = self else { return }
