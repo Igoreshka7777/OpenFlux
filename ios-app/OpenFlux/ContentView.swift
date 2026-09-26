@@ -117,8 +117,8 @@ struct ContentView: View {
                 .foregroundColor(Theme.muted)
                 .multilineTextAlignment(.center)
                 .padding(.top, 9)
-            if vpn.status.hasPrefix("Error:") {
-                Text(vpn.status)
+            if let error = vpn.lastError {
+                Text(error)
                     .font(.footnote)
                     .foregroundColor(Theme.red)
                     .multilineTextAlignment(.center)

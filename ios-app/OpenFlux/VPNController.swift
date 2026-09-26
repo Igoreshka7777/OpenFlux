@@ -6,6 +6,7 @@ import Combine
 final class VPNController: ObservableObject {
     @Published var status = "Disconnected"
     @Published var active = false
+    @Published var lastError: String?
     @Published var log = UserDefaults.standard.string(forKey: "vpnDiagnosticLog") ?? ""
 
     private var manager: NETunnelProviderManager?
@@ -40,8 +41,10 @@ final class VPNController: ObservableObject {
     deinit { logTimer?.invalidate() }
 
     private func load() async {
+        let loadingGeneration = connectionGeneration
         guard let extensionBundleId else {
             appendLog("[app] VPN extension missing from installed app")
+            lastError = "Расширение VPN отсутствует. Проверьте подпись приложения."
             refreshStatus()
             return
         }
@@ -50,8 +53,10 @@ final class VPNController: ObservableObject {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             manager = managers.first { ($0.protocolConfiguration as? NETunnelProviderProtocol)?
                 .providerBundleIdentifier == extensionBundleId }
-            desiredRunning = manager?.isOnDemandEnabled == true
-            subscriptionURL = UserDefaults.standard.string(forKey: "wbSubscriptionURL") ?? ""
+            if connectionGeneration == loadingGeneration {
+                desiredRunning = manager?.isOnDemandEnabled == true
+                subscriptionURL = UserDefaults.standard.string(forKey: "wbSubscriptionURL") ?? ""
+            }
             appendLog("[app] Настройки VPN загружены")
         } catch {
             appendLog("[app] Ошибка загрузки настроек VPN: \(error.localizedDescription)")
@@ -71,9 +76,15 @@ final class VPNController: ObservableObject {
         connectionGeneration += 1
         reconnectTask?.cancel()
         reconnectTask = nil
+        lastError = nil
+        active = true
+        status = "Connecting…"
         appendLog("[app] Подключение запрошено")
         guard extensionBundleId != nil else {
             status = "Error: VPN extension missing"
+            active = false
+            desiredRunning = false
+            lastError = "Расширение VPN отсутствует. Проверьте подпись приложения."
             appendLog("[app] Check signature and OpenFluxTunnel.appex installation")
             return
         }
@@ -86,8 +97,10 @@ final class VPNController: ObservableObject {
         defer { connecting = false }
         let generation = connectionGeneration
         do {
+            appendLog("[app] Загрузка подписки WB Stream")
             let node = try await WBSubscription.load(subscriptionURL)
             guard desiredRunning, generation == connectionGeneration else { return }
+            appendLog("[app] Подписка загружена; сохраняю настройки VPN")
             let m = manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = extensionBundleId
@@ -112,6 +125,13 @@ final class VPNController: ObservableObject {
         } catch {
             guard desiredRunning, generation == connectionGeneration else { return }
             appendLog("[app] Ошибка подключения: \(error.localizedDescription)")
+            lastError = error.localizedDescription
+            if error is WBSubscriptionError {
+                desiredRunning = false
+                active = false
+                status = "Error: \(error.localizedDescription)"
+                return
+            }
             scheduleReconnect()
         }
     }
@@ -149,6 +169,7 @@ final class VPNController: ObservableObject {
         reconnectTask = nil
         active = false
         status = "Disconnected"
+        lastError = nil
         refreshLog()
         appendLog("[app] Отключение запрошено")
         Task {
@@ -217,8 +238,8 @@ final class VPNController: ObservableObject {
 
     private func refreshStatus() {
         guard let conn = manager?.connection else {
-            active = false
-            status = "Disconnected"
+            active = desiredRunning
+            status = desiredRunning ? "Connecting…" : "Disconnected"
             return
         }
         switch conn.status {
@@ -235,6 +256,7 @@ final class VPNController: ObservableObject {
             lastStatus = conn.status
             appendLog("[app] Состояние VPN: \(status)")
             if conn.status == .connected {
+                lastError = nil
                 manualStopPending = false
                 reconnectAttempts = 0
                 reconnectTask?.cancel()
