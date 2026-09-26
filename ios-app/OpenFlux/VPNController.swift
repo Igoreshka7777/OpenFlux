@@ -319,6 +319,10 @@ final class VPNController: ObservableObject {
                 guard let self = self else { return }
                 if let error = error {
                     let nsError = error as NSError
+                    // A delayed diagnostic callback must not overwrite a new connection.
+                    if connection.status == .disconnected || connection.status == .invalid {
+                        self.lastError = nsError.localizedDescription
+                    }
                     self.appendLog("[system] VPN disconnected: \(nsError.domain) " +
                                    "code=\(nsError.code): \(nsError.localizedDescription)")
                     if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
