@@ -11,6 +11,11 @@ settings:
     CURRENT_PROJECT_VERSION: "18"
     DEVELOPMENT_TEAM: "8GQH8GQ252"
 
+packages:
+  Tun2SocksKit:
+    url: https://github.com/EbrahimTahernejad/Tun2SocksKit
+    exactVersion: 5.16.0
+
 targets:
   OpenFlux:
     type: application
@@ -56,6 +61,7 @@ targets:
     dependencies:
       - framework: Lib/OpenFluxWBRuntime.xcframework
         embed: false
+      - package: Tun2SocksKit
     info:
       path: OpenFluxTunnel/Info.plist
       properties:

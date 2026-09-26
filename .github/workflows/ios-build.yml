@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: ios-wb-runtime/go.sum
 
       - name: Install iOS project tools
-        run: brew install xcodegen cocoapods
+        run: brew install xcodegen
 
       - name: Test WB runtime
         working-directory: ios-wb-runtime
@@ -33,17 +33,17 @@ jobs:
       - name: Build WB runtime for iOS
         run: bash ./build_ios_wb.sh
 
-      - name: Generate Xcode project and install pods
+      - name: Generate Xcode project and resolve packages
         working-directory: ios-app
         run: |
           xcodegen generate
-          pod install
+          xcodebuild -resolvePackageDependencies -project OpenFlux.xcodeproj -scheme OpenFlux
 
       - name: Compile iPhone app without signing
         working-directory: ios-app
         run: |
           xcodebuild \
-            -workspace OpenFlux.xcworkspace \
+            -project OpenFlux.xcodeproj \
             -scheme OpenFlux \
             -configuration Release \
             -destination 'generic/platform=iOS' \

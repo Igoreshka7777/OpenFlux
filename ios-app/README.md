@@ -8,7 +8,7 @@
 
 ## Сборка
 
-На Mac требуются Xcode, XcodeGen, CocoaPods, Go и доступная iOS-подпись. Запустите `./build_ios_app.sh` из корня репозитория; результат появится в `ios-app/build/export`. GitHub Actions проверяет сборку без подписи и выдаёт архив приложения, который нельзя установить на iPhone без подписи.
+На Mac требуются Xcode, XcodeGen, Go и доступная iOS-подпись. Запустите `./build_ios_app.sh` из корня репозитория; результат появится в `ios-app/build/export`. GitHub Actions проверяет сборку без подписи и выдаёт архив приложения, который нельзя установить на iPhone без подписи.
 
 Bundle ID приложения: `com.p1neapplexpress-saharev.openflux`. Расширение: `com.p1neapplexpress-saharev.openflux.tunnel`. Для устройства оба идентификатора должны входить в профиль подписи с разрешением Packet Tunnel Network Extension.
 
