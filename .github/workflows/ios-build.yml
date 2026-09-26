@@ -49,18 +49,21 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             build
 
       - name: Pack build output
         working-directory: ios-app
         run: |
-          ditto -c -k --keepParent \
-            build/DerivedData/Build/Products/Release-iphoneos/OpenFlux.app \
-            build/IgorVPN-WBStream-unsigned.app.zip
+          mkdir -p build/ipa/Payload
+          ditto build/DerivedData/Build/Products/Release-iphoneos/OpenFlux.app build/ipa/Payload/OpenFlux.app
+          test -f build/ipa/Payload/OpenFlux.app/PlugIns/OpenFluxTunnel.appex/OpenFluxTunnel
+          ditto -c -k --norsrc --noextattr --keepParent build/ipa/Payload build/IgorVPN-WBStream-unsigned.ipa
+          unzip -t build/IgorVPN-WBStream-unsigned.ipa
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
           name: IgorVPN-WBStream-unsigned-iphoneos
-          path: ios-app/build/IgorVPN-WBStream-unsigned.app.zip
+          path: ios-app/build/IgorVPN-WBStream-unsigned.ipa
           if-no-files-found: error
