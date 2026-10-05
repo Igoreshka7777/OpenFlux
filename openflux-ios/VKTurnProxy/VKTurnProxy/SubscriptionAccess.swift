@@ -17,6 +17,12 @@ struct SubscriptionAccess: Decodable, Equatable {
         guard state == "expired", let expiry = expiresAt, expiry > 0 else { return false }
         return serverTime > expiry
     }
+
+    var daysRemaining: Int64? {
+        guard let expiry = expiresAt, expiry > 0 else { return nil }
+        let seconds = max(0, expiry - serverTime)
+        return seconds / 86_400 + (seconds % 86_400 > 0 ? 1 : 0)
+    }
 }
 
 private final class SubscriptionRedirectPolicy: NSObject, URLSessionTaskDelegate {

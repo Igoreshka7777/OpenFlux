@@ -1,8 +1,9 @@
-# OpenFlux iOS handoff (build 451)
+# OpenFlux iOS handoff (build 452)
 
 This is the iOS source project, not an installable IPA.
 
 Recent changes:
+- Settings now show remaining subscription days and the exact expiration date in the device timezone. Partial days round up; unlimited access and unavailable status are shown separately.
 - A verified expired subscription opens the renewal page inside a full-screen app view. Telegram and VK buttons contact the administrator; the recheck button checks renewed access with the existing connection link.
 - Subscription status is checked before connection and every 15 seconds while the app is open. While the VPN extension runs, it also checks every 20 seconds and schedules a local notification on confirmed expiry, subject to notification permission. When both the app and VPN are closed, the check resumes on the next launch; this is not a push-notification service.
 - Only an explicit expired status with a passed server deadline triggers renewal. Network failures, disabled access and traffic quota errors are not interpreted as subscription expiry. A confirmed expired tunnel is stopped so ordinary internet can be used for renewal.
@@ -18,7 +19,7 @@ Recent changes:
 - The support chat opens full screen from the log screen and has a Back button.
 - The main background stays plain dark, as requested. The power button uses the glowing halo.
 - The iOS app icon is the same 1024×1024 OpenFlux orange-red ring used by the Android launcher.
-- The Android release package 1.0.12 is available separately in `outputs/`.
+- The Android release package 1.0.13 is available separately in `outputs/`.
 
 Open `VKTurnProxy/VKTurnProxy.xcodeproj` on a Mac with Xcode. First build the Go bridge:
 

@@ -31,6 +31,10 @@ jobs:
           cache-dependency-path: openflux-ios/go.sum
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Check subscription dates and expiry
+        run: |
+          swiftc VKTurnProxy/VKTurnProxy/SubscriptionAccess.swift tools/subscriptioncheck/main.swift -o "$RUNNER_TEMP/subscriptioncheck"
+          "$RUNNER_TEMP/subscriptioncheck"
       - name: Build iPhone networking bridge
         run: |
           set -euo pipefail
@@ -69,7 +73,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-451-unsigned
+          name: OpenFlux-iOS-452-unsigned
           path: |
             openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
             openflux-ios/build_output/SHA256SUMS.txt
@@ -79,7 +83,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-451-build-log
+          name: OpenFlux-iOS-452-build-log
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7

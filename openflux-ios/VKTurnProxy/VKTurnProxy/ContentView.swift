@@ -911,6 +911,8 @@ struct SettingsView: View {
                     }
                 }
 
+                SubscriptionSettingsCard(password: store.activeServer.useCsqtt ? store.activeServer.csqttPassword : "")
+
                 OpenFluxCard {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {

@@ -65,6 +65,62 @@ struct SubscriptionPresentationHost: View {
     }
 }
 
+struct SubscriptionSettingsCard: View {
+    let password: String
+    @ObservedObject private var monitor = SubscriptionMonitor.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var checked = false
+    @State private var offline = false
+    private var status: SubscriptionAccess? { monitor.entries[password]?.status }
+
+    private var summary: String {
+        guard !password.isEmpty else { return "Добавьте ссылку подключения" }
+        guard let status = status else { return checked ? "Не удалось получить срок" : "Проверяем…" }
+        if status.expired { return "Подписка закончилась" }
+        if status.state == "disabled" { return "Доступ отключён" }
+        if status.state == "limit" { return "Лимит трафика исчерпан" }
+        guard status.state == "active" else { return "Срок недоступен" }
+        guard let days = status.daysRemaining else { return "Без ограничения срока" }
+        return days > 0 ? "Осталось \(days) дн." : "Срок истекает"
+    }
+
+    var body: some View {
+        OpenFluxCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Подписка").font(.system(size: 18, weight: .bold))
+                Text(summary).font(.system(size: 24, weight: .bold)).foregroundColor(OpenFluxStyle.orange)
+                if let expiry = status?.expiresAt, expiry > 0 {
+                    Text("До " + Self.dateFormat.string(from: Date(timeIntervalSince1970: TimeInterval(expiry))))
+                        .font(.caption).foregroundColor(OpenFluxStyle.muted)
+                }
+                if offline && status != nil {
+                    Text("Нет связи с сервером. Последние полученные данные.")
+                        .font(.caption).foregroundColor(OpenFluxStyle.muted)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: password + (scenePhase == .active ? ":active" : ":inactive")) {
+            guard scenePhase == .active else { return }
+            checked = false
+            guard !password.isEmpty else { checked = true; return }
+            while !Task.isCancelled {
+                let result = await monitor.refresh(password: password)
+                guard !Task.isCancelled else { return }
+                checked = true
+                offline = result == nil
+                do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
+            }
+        }
+    }
+
+    private static let dateFormat: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "dd.MM.yyyy HH:mm"
+        return formatter
+    }()
+}
+
 struct SubscriptionRenewalView: View {
     let password: String
     let onClose: () -> Void
