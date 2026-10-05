@@ -1,0 +1,85 @@
+name: OpenFlux iOS unsigned
+
+on:
+  push:
+    branches: [codex/openflux-ios-451]
+    paths:
+      - 'openflux-ios/**'
+      - '.github/workflows/openflux-ios-unsigned.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openflux-ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: openflux-ios
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: openflux-ios/go.mod
+          cache-dependency-path: openflux-ios/go.sum
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build iPhone networking bridge
+        run: |
+          set -euo pipefail
+          make -C WireGuardBridge ios-device
+          xcodebuild -create-xcframework \
+            -library "$PWD/WireGuardBridge/build/libwg-turn-ios-arm64.a" \
+            -headers "$PWD/WireGuardBridge/include" \
+            -output "$PWD/WireGuardBridge/build/WireGuardTURN.xcframework"
+      - name: Generate Xcode project
+        working-directory: openflux-ios/VKTurnProxy
+        run: xcodegen generate
+      - name: Build unsigned iPhone app
+        run: |
+          set -euo pipefail
+          mkdir -p build_output
+          xcodebuild \
+            -project VKTurnProxy/VKTurnProxy.xcodeproj \
+            -scheme VKTurnProxy \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build_output/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build 2>&1 | tee build_output/xcodebuild.log
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP=build_output/DerivedData/Build/Products/Release-iphoneos/VKTurnProxy.app
+          test -d "$APP/PlugIns/PacketTunnel.appex"
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")
+          mkdir -p build_output/package/Payload
+          ditto "$APP" build_output/package/Payload/OpenFlux.app
+          (cd build_output/package && ditto -c -k --keepParent Payload "../OpenFlux-iOS-${VERSION}-unsigned.ipa")
+          shasum -a 256 build_output/OpenFlux-iOS-*-unsigned.ipa > build_output/SHA256SUMS.txt
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlux-iOS-451-unsigned
+          path: |
+            openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
+            openflux-ios/build_output/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload compiler log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlux-iOS-451-build-log
+          path: openflux-ios/build_output/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
