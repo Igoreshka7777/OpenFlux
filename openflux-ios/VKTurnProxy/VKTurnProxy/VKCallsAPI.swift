@@ -56,12 +56,12 @@ enum VKCallsAPI {
             comps.path = "/method/calls.start"
             comps.queryItems = [
                 URLQueryItem(name: "v", value: apiVersion),
-                URLQueryItem(name: "access_token", value: accessToken),
             ]
             guard let url = comps.url else { return .failure(.malformed) }
 
             var req = URLRequest(url: url)
-            req.httpMethod = "GET"
+            req.httpMethod = "POST"
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             req.timeoutInterval = 20
 
             do {

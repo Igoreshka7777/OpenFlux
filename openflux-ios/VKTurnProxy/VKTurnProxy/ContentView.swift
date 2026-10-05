@@ -420,7 +420,7 @@ private struct ActiveServerControls: View {
         // 26). vkLink is global.
         let s = store.activeServer
         var issues: [ConfigValidation.Issue?] = [
-            ConfigValidation.vkLink(vkLink),
+            s.connectionToken.isEmpty ? ConfigValidation.vkLink(vkLink) : nil,
             ConfigValidation.peerAddress(s.peerAddress),
             ConfigValidation.turnOverride(s.turnServerOverride),
         ]
@@ -844,6 +844,9 @@ struct SettingsView: View {
         }
         if !server.csqttDeviceID.isEmpty {
             items.append(URLQueryItem(name: "device", value: server.csqttDeviceID))
+        }
+        if !server.connectionToken.isEmpty {
+            items.append(URLQueryItem(name: "token", value: server.connectionToken))
         }
         components.queryItems = items
         return components.url?.absoluteString ?? ""

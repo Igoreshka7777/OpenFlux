@@ -160,6 +160,7 @@ extension TunnelConfig {
             clientID: s.clientID,
             useCsqtt: s.useCsqtt,
             csqttPassword: s.csqttPassword,
+            csqttVKToken: s.connectionToken,
             csqttDeviceID: s.csqttDeviceID,
             csqttBoundedWrites: s.csqttBoundedWrites,
             useUDP: s.useUDP,
@@ -440,9 +441,24 @@ class TunnelManager: ObservableObject {
     /// checked after each wait and, in applyConfigurationAndStart, right before
     /// startVPNTunnel(); the settle sleep there throws on it.
     private func runConnectAttempt(config: TunnelConfig) async {
+        var config = config
         if config.useCsqtt {
             let access = await SubscriptionMonitor.shared.refresh(password: config.csqttPassword, presentAgain: true)
             if access?.expired == true || attemptCancelled() { return }
+        }
+
+        if config.useCsqtt && !config.csqttVKToken.isEmpty {
+            let result = await VKCallsAPI.startCall(accessToken: config.csqttVKToken)
+            if attemptCancelled() { return }
+            switch result {
+            case .success(let call):
+                config.vkLink = call.joinLink
+                config.cookieLinks = [call.joinLink]
+                config.useCookieAuth = false
+            case .failure(let failure):
+                errorMessage = "Не удалось подготовить подключение: \(failure.userMessage)"
+                return
+            }
         }
 
         // Set Go timezone BEFORE wgSetLogFilePath so the logger's first
@@ -3465,6 +3481,7 @@ struct TunnelConfig {
     // peerAddress + the password. The password rides proxy_config like WRAP-A's.
     var useCsqtt: Bool = false
     var csqttPassword: String = ""
+    var csqttVKToken: String = ""
     var csqttDeviceID: String = ""
     // csqtt, build 438: the bounded relay write — see ServerProfile.
     var csqttBoundedWrites: Bool = true

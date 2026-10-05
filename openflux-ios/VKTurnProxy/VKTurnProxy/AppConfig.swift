@@ -306,6 +306,7 @@ struct ConnectionSettings: Codable {
     /// minted on import, never carried. `var … = nil` like the fields above.
     var useCsqtt: Bool? = nil
     var csqttPassword: String? = nil
+    var csqttVKToken: String? = nil
     /// The csqtt server BINDS a password to one device id, and an admin may
     /// have set that id on the panel — then a link recipient's minted id is
     /// DENIED:device_mismatch. `csqtt://connect?…&device=<id>` (our extension

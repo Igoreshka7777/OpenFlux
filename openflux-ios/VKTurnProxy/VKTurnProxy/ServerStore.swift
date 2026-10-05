@@ -34,6 +34,7 @@ final class ServerStore: ObservableObject {
         ("obfProfile", \.obfProfile), ("clientID", \.clientID),
         ("wrapAPassword", \.wrapAPassword), ("deviceID", \.deviceID),
         ("csqttPassword", \.csqttPassword), ("csqttDeviceID", \.csqttDeviceID),
+        ("csqttVKToken", \.csqttVKToken),
     ]
     private static let boolKeyPaths: [(String, WritableKeyPath<ServerProfile, Bool>, Bool)] = [
         ("useUDP", \.useUDP, false), ("useDTLS", \.useDTLS, true),
@@ -75,6 +76,15 @@ final class ServerStore: ObservableObject {
             persist()
         }
         seedLegacyWrapADeviceID()
+        var recoveredToken = false
+        for index in servers.indices where servers[index].csqttVKToken.isEmpty {
+            let token = servers[index].connectionToken
+            if !token.isEmpty {
+                servers[index].csqttVKToken = token
+                recoveredToken = true
+            }
+        }
+        if recoveredToken { persist() }
         // Project the active server onto the flat @AppStorage keys so ContentView
         // / TunnelManager always read the active server's config. On first launch
         // this is a no-op (Server1 was built from those very keys).

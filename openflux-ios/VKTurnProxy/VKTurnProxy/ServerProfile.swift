@@ -67,6 +67,15 @@ struct ServerProfile: Codable, Identifiable, Equatable {
     // exchange — hence the no-forward-secrecy notice in the UI.
     var useCsqtt: Bool = false
     var csqttPassword: String = ""
+    var csqttVKToken: String = ""
+
+    var connectionToken: String {
+        guard useCsqtt else { return "" }
+        if CsqttLinkToken.valid(csqttVKToken) { return csqttVKToken }
+        return CsqttLinkToken.recover(
+            from: UserDefaults.standard.string(forKey: "openFluxConnectionLink") ?? "",
+            peer: peerAddress, password: csqttPassword)
+    }
     /// Device identity the csqtt server binds an unbound password to (a second
     /// device on the same password is DENIED:device_mismatch). Minted per
     /// server like WRAP-A's deviceID; a `csqtt://connect?…&device=<id>` link
@@ -101,7 +110,7 @@ struct ServerProfile: Codable, Identifiable, Equatable {
         case useSrtp, useWrap, useWrapA, useWrapS
         case wrapKeyHex, obfProfile, clientID
         case wrapAPassword, deviceID
-        case useCsqtt, csqttPassword, csqttDeviceID
+        case useCsqtt, csqttPassword, csqttDeviceID, csqttVKToken
         case csqttBoundedWrites
     }
 }
@@ -144,6 +153,7 @@ extension ServerProfile {
         if let v = try c.decodeIfPresent(String.self, forKey: .deviceID) { deviceID = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .useCsqtt) { useCsqtt = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .csqttPassword) { csqttPassword = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .csqttVKToken) { csqttVKToken = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .csqttDeviceID) { csqttDeviceID = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .csqttBoundedWrites) { csqttBoundedWrites = v }
     }
@@ -177,6 +187,7 @@ extension ServerProfile {
         if let v = s.clientID { clientID = v }
         if let v = s.wrapAPassword { wrapAPassword = v }
         if let v = s.csqttPassword { csqttPassword = v }
+        if let v = s.csqttVKToken { csqttVKToken = v }
         // Transport mode is ONE enum spread over five flags: resolve it as a
         // coupled set with the serverModeBinding precedence
         // (useCsqtt > useWrapS > useWrapA > useSrtp > useWrap). A link that
@@ -244,6 +255,7 @@ struct ServerSettings: Codable {
     /// server bound the password to — backed up so a restore keeps working.
     var useCsqtt: Bool? = nil
     var csqttPassword: String? = nil
+    var csqttVKToken: String? = nil
     var csqttDeviceID: String? = nil
     var csqttBoundedWrites: Bool? = nil
 
@@ -271,6 +283,7 @@ struct ServerSettings: Codable {
         deviceID = p.deviceID
         useCsqtt = p.useCsqtt
         csqttPassword = p.csqttPassword
+        csqttVKToken = p.connectionToken
         csqttDeviceID = p.csqttDeviceID
         csqttBoundedWrites = p.csqttBoundedWrites
     }
@@ -302,6 +315,7 @@ struct ServerSettings: Codable {
         if let v = deviceID { p.deviceID = v }
         if let v = useCsqtt { p.useCsqtt = v }
         if let v = csqttPassword { p.csqttPassword = v }
+        if let v = csqttVKToken { p.csqttVKToken = v }
         if let v = csqttDeviceID { p.csqttDeviceID = v }
         if let v = csqttBoundedWrites { p.csqttBoundedWrites = v }
         return p

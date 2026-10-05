@@ -14,6 +14,26 @@
 
 import Foundation
 
+enum CsqttLinkToken {
+    static func valid(_ token: String) -> Bool {
+        !token.isEmpty && !token.unicodeScalars.contains {
+            CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0)
+        }
+    }
+
+    // Recover links saved by versions that did not import token=. Never use
+    // another profile's credential, even if it points to the same server.
+    static func recover(from raw: String, peer: String, password: String) -> String {
+        guard let url = URLComponents(string: raw.replacingOccurrences(of: "&amp;", with: "&")),
+              url.scheme?.lowercased() == "csqtt", url.host?.lowercased() == "connect" else { return "" }
+        let q = Dictionary((url.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
+        guard q["v"] == "2", let host = q["host"], let port = q["peer"],
+              "\(host):\(port)" == peer, q["password"] == password,
+              let token = q["token"], valid(token) else { return "" }
+        return token
+    }
+}
+
 enum ConnectionLinkFragment {
     /// A server name longer than this is cut — the main screen and the card
     /// show the name in one line; SharedLogger uses the same bound for an SSID.

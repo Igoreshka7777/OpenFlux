@@ -629,7 +629,7 @@ enum BackupManager {
         guard trimmed.lowercased().hasPrefix("csqtt://") else {
             throw BackupError.decodeFailed("URL scheme is not csqtt://")
         }
-        var host = "", port = "", password = "", firstHash = "", device = ""
+        var host = "", port = "", password = "", firstHash = "", device = "", token = ""
         var fragment: String? = nil
         // The connect form is `csqtt://connect?…` — the `?` is part of the
         // test: a LEGACY link whose password starts with "connect"
@@ -639,7 +639,7 @@ enum BackupManager {
         if trimmed.lowercased().hasPrefix("csqtt://connect?") {
             let (link, frag) = ConnectionLinkFragment.split(trimmed)
             fragment = frag
-            guard let comps = URLComponents(string: link) else {
+            guard let comps = URLComponents(string: link.replacingOccurrences(of: "&amp;", with: "&")) else {
                 throw BackupError.decodeFailed("csqtt:// link is not a valid URL")
             }
             let q = Dictionary((comps.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
@@ -650,6 +650,10 @@ enum BackupManager {
             port = q["peer"] ?? ""
             password = q["password"] ?? ""
             device = stripControlChars(q["device"] ?? "")
+            token = q["token"] ?? ""
+            if !token.isEmpty && !CsqttLinkToken.valid(token) {
+                throw BackupError.decodeFailed("Некорректный VK токен в ссылке")
+            }
             // `+` is the separator in his hashes list; URLComponents already
             // percent-decoded the values (a `+` stays a `+`).
             firstHash = (q["hashes"] ?? "").split(separator: "+").first.map(String.init) ?? ""
@@ -691,6 +695,7 @@ enum BackupManager {
         )
         settings.useCsqtt = true
         settings.csqttPassword = password
+        settings.csqttVKToken = token
         if !device.isEmpty { settings.csqttDeviceID = device }
         settings.serverName = ConnectionLinkFragment.serverName(from: fragment)
         return ConnectionLink(version: supportedConfigVersion, type: "connection", settings: settings)
