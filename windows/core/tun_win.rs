@@ -75,6 +75,29 @@ fn cleanup_routes() -> &'static Mutex<Vec<String>> {
     CLEANUP_ROUTES.get_or_init(|| Mutex::new(Vec::new()))
 }
 
+
+fn journal_path() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    base.join("OpenFlux").join("routes.pending")
+}
+
+fn record_route(entry: String) {
+    use std::io::Write as _;
+    let mut routes = cleanup_routes().lock().unwrap();
+    routes.push(entry.clone());
+    let path = journal_path();
+    if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{entry}");
+    }
+}
+
+// Only accept literal IPv4 route entries created by this application.
+fn valid_journal_route(line: &str) -> bool {
+    let words: Vec<_> = line.split_whitespace().collect();
+    words.len() == 4 && words[1] == "mask" && [0,2,3].iter().all(|&i| words[i].parse::<Ipv4Addr>().is_ok())
+}
+
 pub struct WinTunDevice {
     // Порядок полей = порядок drop: сначала сессия, затем адаптер и DLL
     session: Arc<wintun::Session>,
@@ -837,6 +860,7 @@ fn add_half_routes(gateway_tun: Ipv4Addr) -> Result<()> {
             "1",
         ])
         .with_context(|| format!("маршрут {destination}/1 через TUN не добавлен"))?;
+        record_route(format!("{destination} mask {HALF_MASK} {gateway_tun}"));
     }
     verify_half_routes(gateway_tun)
 }
@@ -883,12 +907,7 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
     let luid = unsafe { adapter.get_luid().Value };
     set_address(luid, ip_addr)?;
 
-    let dns_servers: Vec<String> = dns
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .collect();
+    let dns_servers: Vec<String> = vec!["8.8.8.8".into(), "8.8.4.4".into()];
     if dns_servers.is_empty() {
         bail!("TUNCONF не содержит DNS");
     }
@@ -896,40 +915,10 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
         crate::log_error!("[TUN] Конфигурация интерфейса (метрика/MTU) не выставлена: {error}");
     }
 
-    // 3. Предочистка стейл-маршрутов от прошлой сессии (игнорируем ошибки —
-    // их может и не быть), затем добавляем заново
-    let mut stale_routes = vec![
-        format!("0.0.0.0 mask {HALF_MASK}"),
-        format!("128.0.0.0 mask {HALF_MASK}"),
-        format!("{peer_ip} mask {HOST_MASK}"),
-    ];
-    for cidr in VK_EXCLUDE_CIDRS {
-        if let Some((network, mask)) = parse_cidr(cidr) {
-            stale_routes.push(format!("{network} mask {mask}"));
-        }
-    }
-    // [FOCSQ] Легаси-DNS-подсети: маршруты напрямую от прошлых сессий
-    for cidr in LEGACY_DNS_EXCLUDE_CIDRS {
-        if let Some((network, mask)) = parse_cidr(cidr) {
-            stale_routes.push(format!("{network} mask {mask}"));
-        }
-    }
-    // [FOCSQ] Стейл-DNS-исключения прошлых сессий: раньше TUNCONF-DNS
-    // исключался наружу /32-маршрутом — теперь он должен идти в туннель.
-    // route_delete ошибки игнорирует, удаление идемпотентно.
-    for server in dns_servers.iter().chain(system_dns_servers().iter()) {
-        if server.parse::<Ipv4Addr>().is_ok() {
-            stale_routes.push(format!("{server} mask {HOST_MASK}"));
-        }
-    }
-    for stale in &stale_routes {
-        route_delete(stale);
-    }
-    // [FOCSQ] Стейл-исключения TURN от прошлой сессии
-    for ip in dynamic_excludes().lock().unwrap().drain() {
-        route_delete(&format!("{ip} mask {HOST_MASK}"));
-    }
-
+    // OpenFlux: never delete other applications' routes or drain deferred TURN IPs.
+    // The fresh adapter owns its routes; cleanup tracks only successful additions.
+    run_cmd("powershell", &["-NoProfile", "-NonInteractive", "-Command",
+        "New-NetFirewallRule -Name 'OpenFlux.Windows.IPv6' -DisplayName 'OpenFlux VPN IPv6 guard' -Direction Outbound -RemoteAddress '::/0' -Action Block -ErrorAction Stop | Out-Null"])?;
     // 4. Перехват трафика. Пир НЕ исключаем: транспорт всегда TURN
     //    (клиент на IP пира напрямую не стучится — только ChannelBind
     //    через релей), а исключение выкидывало весь хостинг на пиру
@@ -938,7 +927,7 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
     add_half_routes(gateway_tun)?;
     // [FOCSQ] Подсети VK/DNS целиком через исходный шлюз (PWDTT-style):
     // закрывают ротацию CDN без гонок динамического резолва
-    let mut cidr_cleanup: Vec<String> = Vec::new();
+
     for cidr in VK_EXCLUDE_CIDRS {
         let Some((network, mask)) = parse_cidr(cidr) else {
             continue;
@@ -949,7 +938,7 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
             &gateway,
             &interface,
         )) {
-            Ok(_) => cidr_cleanup.push(format!("{network} mask {mask}")),
+            Ok(_) => record_route(format!("{network} mask {mask} {gateway}")),
             Err(error) => crate::log_error!(
                 "[TUN] Exclude-подсеть VK {cidr} не добавлена: {error}"
             ),
@@ -965,20 +954,12 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
     // (роутер/провайдер): приватные адреса из сети пира недостижимы, а
     // «сырые» прямые запросы отдельных приложений пусть не рвутся. Параллельные
     // запросы резолвера к ним подавляет NRPT-правило (см. set_nrpt_rule).
-    let mut dns_excludes = system_dns_servers();
+    let mut dns_excludes: Vec<String> = system_dns_servers().into_iter().filter(|ip| !dns_servers.contains(ip)).collect();
     dns_excludes.sort();
     dns_excludes.dedup();
 
     // Запоминаем, что чистить при остановке (маршруты 0/1 и 128/1 умирают
     // вместе с адаптером, но подстрахуемся)
-    let mut pending = cleanup_routes().lock().unwrap();
-    pending.clear();
-    pending.extend([
-        format!("0.0.0.0 mask {HALF_MASK}"),
-        format!("128.0.0.0 mask {HALF_MASK}"),
-    ]);
-    // [FOCSQ] Подсети VK чистятся при остановке
-    pending.extend(cidr_cleanup);
     for server in &dns_excludes {
         if server.parse::<Ipv4Addr>().is_err() {
             continue;
@@ -989,10 +970,9 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
         // в туннель. /32 до самого шлюза через себя валиден: это стандартная
         // практика pin'а шлюза (так делает WireGuard для своего эндпоинта).
         if add_exclude_route(server, &gateway, &interface, "DNS") {
-            pending.push(format!("{server} mask {HOST_MASK}"));
+            record_route(format!("{server} mask {HOST_MASK} {gateway}"));
         }
     }
-    drop(pending);
 
     // [FOCSQ] DNS на адаптер — последним шагом, когда ВСЕ exclude-маршруты
     // уже стоят. Резолвер переключаем на TUNCONF-DNS (1.1.1.1): его трафик
@@ -1104,10 +1084,7 @@ pub fn exclude_host_ip(ip: IpAddr) {
         return;
     };
     if add_exclude_route(&destination, &gateway, &interface, "TURN") {
-        cleanup_routes()
-            .lock()
-            .unwrap()
-            .push(format!("{destination} mask {HOST_MASK}"));
+        record_route(format!("{destination} mask {HOST_MASK} {gateway}"));
         crate::log_error!("[TUN] Exclude-маршрут TURN {destination} добавлен");
     }
 }
@@ -1118,10 +1095,7 @@ fn apply_deferred_excludes(gateway: &str, interface: &str) {
     let pending: Vec<String> = dynamic_excludes().lock().unwrap().iter().cloned().collect();
     for destination in pending {
         if add_exclude_route(&destination, &gateway, &interface, "TURN") {
-            cleanup_routes()
-                .lock()
-                .unwrap()
-                .push(format!("{destination} mask {HOST_MASK}"));
+            record_route(format!("{destination} mask {HOST_MASK} {gateway}"));
             crate::log_error!("[TUN] Отложенный Exclude-маршрут TURN {destination} добавлен");
         }
     }
@@ -1131,10 +1105,16 @@ fn apply_deferred_excludes(gateway: &str, interface: &str) {
 pub fn remove_routes() {
     // [FOCSQ] NRPT-правило сессии больше не должно перехватывать резолюцию
     remove_nrpt_rule();
-    let entries: Vec<String> = {
+    let _ = run_cmd("powershell", &["-NoProfile", "-NonInteractive", "-Command",
+        "Remove-NetFirewallRule -Name 'OpenFlux.Windows.IPv6' -ErrorAction SilentlyContinue"]);
+    let mut entries: Vec<String> = {
         let mut pending = cleanup_routes().lock().unwrap();
         std::mem::take(&mut *pending)
     };
+    if let Ok(saved) = std::fs::read_to_string(journal_path()) {
+        entries.extend(saved.lines().filter(|line| valid_journal_route(line)).map(str::to_owned));
+    }
+    entries.sort(); entries.dedup();
     // [FOCSQ] Параллельное удаление: ~25 записей по одному route.exe
     // занимали 5-15 секунд, одновременно — меньше секунды.
     std::thread::scope(|scope| {
@@ -1143,6 +1123,7 @@ pub fn remove_routes() {
         }
     });
     // [FOCSQ] Динамические исключения больше не действительны
+    let _ = std::fs::remove_file(journal_path());
     *GATEWAY_ROUTE.lock().unwrap() = None;
     dynamic_excludes().lock().unwrap().clear();
 }

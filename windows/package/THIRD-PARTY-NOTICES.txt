@@ -1,0 +1,14 @@
+OpenFlux Windows 1.0.0
+
+The OpenFlux desktop interface was independently implemented for this build.
+No FOCSQ user-interface layouts, images, logos or promotional links are used.
+
+CSQTT protocol core: Copyright 2026 amurcanov.
+Windows native tunnel adaptations: Copyright 2026 luminescq.
+Source: https://github.com/luminescq/focsq
+License: PolyForm Noncommercial 1.0.0 (LICENSE-CSQTT.txt).
+Original copyright and source attribution notices are preserved.
+
+Microsoft WebView2 SDK: Microsoft Corporation (LICENSE-WebView2.txt).
+Microsoft Visual C++ Runtime: Microsoft Corporation.
+Wintun: WireGuard LLC. https://www.wintun.net/

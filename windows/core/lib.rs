@@ -357,6 +357,7 @@ pub async fn run_client(arguments: ClientConfig, external_cancel: Option<Cancell
     let stats_task = tokio::spawn(stats.clone().run(events.clone(), cancel.clone()));
     let (config_tx, mut config_rx) = tokio::sync::mpsc::channel::<String>(32);
     let config_events = events.clone();
+    let config_cancel = cancel.clone();
     let config_task = tokio::spawn(async move {
         let mut last_config = None;
         while let Some(config) = config_rx.recv().await {
@@ -376,7 +377,9 @@ pub async fn run_client(arguments: ClientConfig, external_cancel: Option<Cancell
                             crate::log_error!("[КЛИЕНТ] TUN-адаптер настроен (IP/DNS/маршруты)")
                         }
                         Err(error) => {
-                            crate::log_error!("[ОШИБКА] Настройка TUN не удалась: {error:#}")
+                            crate::log_error!("[ОШИБКА] Настройка TUN не удалась: {error:#}");
+                            config_cancel.cancel();
+                            break;
                         }
                     }
                 }
@@ -387,7 +390,9 @@ pub async fn run_client(arguments: ClientConfig, external_cancel: Option<Cancell
                             crate::log_error!("[КЛИЕНТ] TUN-адаптер настроен (IP/DNS/маршруты)")
                         }
                         Err(error) => {
-                            crate::log_error!("[ОШИБКА] Настройка TUN не удалась: {error:#}")
+                            crate::log_error!("[ОШИБКА] Настройка TUN не удалась: {error:#}");
+                            config_cancel.cancel();
+                            break;
                         }
                     }
                 }

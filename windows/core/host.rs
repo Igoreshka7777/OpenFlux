@@ -8,6 +8,8 @@ fn main() -> anyhow::Result<()> {
         println!("OpenFlux Windows 1.0.0 | CSQTT-WIRE-3");
         return Ok(());
     }
+    #[cfg(windows)] csqtt_core::tun_win::teardown();
+    if std::env::args().any(|a| a == "--repair") { return Ok(()); }
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
     let mut line = String::new();
     io::stdin().read_line(&mut line)?;
@@ -19,7 +21,7 @@ fn main() -> anyhow::Result<()> {
         device_id: field("device_id"), vk_js_token: field("token"),
         workers: v["workers"].as_u64().unwrap_or(18).clamp(3,54) as usize,
         vk_hash_mode: if field("hashes").is_empty() { "auto_js" } else { "manual" }.into(),
-        vk_auth_mode: "vkcalls".into(), captcha_mode: "manual".into(),
+        vk_auth_mode: "vkcalls".into(), captcha_mode: "wv".into(),
         tun_uds: "wintun".into(), ..ClientConfig::default()
     };
     #[cfg(windows)] {
