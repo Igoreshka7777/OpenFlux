@@ -1,0 +1,36 @@
+name: OpenFlux Windows
+on:
+  push:
+    branches: [codex/openflux-windows]
+    paths: ['windows/**', '.github/workflows/openflux-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows/core
+      - name: Build network core
+        working-directory: windows/core
+        run: cargo +1.97.1 build --release --locked --bin openflux-core
+      - name: Protocol tests
+        working-directory: windows/core
+        run: cargo +1.97.1 test --locked --lib wire_protocol
+      - name: Stage
+        shell: pwsh
+        run: |
+          Copy-Item windows/core/target/release/openflux-core.exe windows/package/
+          foreach ($dll in @('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll')) {
+            Copy-Item "$env:WINDIR/System32/$dll" windows/package/
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlux-Windows-core
+          path: windows/package/
