@@ -222,7 +222,7 @@ public class MainWindow : Window {
             try{var v=json.Deserialize<Dictionary<string,object>>(parts[2]);
                 if(parts[1]=="TUNNEL_READY") {ready=true;PaintState();}
                 if(parts[1]=="STATS") {if(traffic!=null)traffic.Text="Потоки: "+v["active"]+"  ·  Трафик: "+((Convert.ToDouble(v["bytes_up"])+Convert.ToDouble(v["bytes_down"]))/1048576).ToString("0.0")+" МБ";}
-                if(parts[1]=="ERROR"){string code=Convert.ToString(v["code"]);AddLog("Ошибка: "+Convert.ToString(v["message"]));if(v.ContainsKey("fatal")&&Convert.ToBoolean(v["fatal"]))Stop(Convert.ToString(v["message"]));}
+                if(parts[1]=="ERROR"){string code=Convert.ToString(v["code"]);AddLog("Ошибка: "+Convert.ToString(v["message"]));if(v.ContainsKey("fatal")&&Convert.ToBoolean(v["fatal"])){stopReason=Redaction.Clean(Convert.ToString(v["message"]),current);Stop(stopReason);}}
             }catch{}return;
         }
         // TUNNEL_READY confirms configuration independently of diagnostic wording.

@@ -46,8 +46,11 @@ fn main() -> anyhow::Result<()> {
     // Includes failures before the core's ordinary shutdown path.
     #[cfg(windows)] if result.is_err() { csqtt_core::tun_win::teardown(); }
     rt.shutdown_timeout(std::time::Duration::from_secs(3));
-    if result.is_err() {
-        println!("__OPENFLUX_ERROR__|Не удалось запустить подключение. Проверьте ссылку и журнал.");
+    csqtt_core::shutdown_process_logging();
+    if let Err(error) = result {
+        println!("__CSQTT_EVENT__|ERROR|{}", serde_json::json!({
+            "code": "startup_failed", "message": format!("{error:#}"), "fatal": true
+        }));
         std::process::exit(1);
     }
     Ok(())

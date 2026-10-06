@@ -136,6 +136,10 @@ pub fn set_log_callback(cb: Box<dyn Fn(String) + Send + Sync>) {
     logging::set_log_callback(cb);
 }
 
+pub fn shutdown_process_logging() {
+    let _ = logging::shutdown(Duration::from_secs(2));
+}
+
 /// Принудительное включение структурированных событий (__CSQTT_EVENT__|...)
 /// для embedded-режима, когда ядро живёт в процессе host-приложения
 /// и переменную окружения CSQTT_EVENTS задать нельзя.

@@ -30,6 +30,6 @@ class Verify {
   var add=typeof(MainWindow).GetMethod("AddLog",flags);var logs=(System.Collections.Generic.List<string>)typeof(MainWindow).GetField("logs",flags).GetValue(w);int count=logs.Count;
   add.Invoke(w,new object[]{" \r\n "});Check(logs.Count==count,"Blank output does not flood journal");
   add.Invoke(w,new object[]{"Repeated diagnostic"});add.Invoke(w,new object[]{"Repeated diagnostic"});Check(logs.Count==count+1&&logs[logs.Count-1].EndsWith("(x2)"),"Repeated diagnostics coalesced");
-  foreach(string page in new[]{"home","settings","support"}){w.Preview(page,Path.Combine(args[0],"OpenFlux-Windows-"+page+".png"));Check(true,"Rendered "+page);}Console.WriteLine("Verified "+tests+" checks");
+  ready.SetValue(w,false);foreach(string page in new[]{"home","settings","support"}){w.Preview(page,Path.Combine(args[0],"OpenFlux-Windows-"+page+".png"));Check(true,"Rendered "+page);}Console.WriteLine("Verified "+tests+" checks");
  }
 }
