@@ -12,6 +12,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Windows firewall accepts IPv6 guard
+        shell: powershell
+        run: ./windows/core/ipv6_guard.ps1 -ValidationOnly
       - name: Rust
         run: rustup toolchain install 1.97.1 --profile minimal
       - uses: Swatinem/rust-cache@v2

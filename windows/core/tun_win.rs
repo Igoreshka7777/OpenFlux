@@ -918,7 +918,7 @@ pub async fn apply_tunconf(ip: &str, dns: &str, peer_ip: &str) -> Result<()> {
     // OpenFlux: never delete other applications' routes or drain deferred TURN IPs.
     // The fresh adapter owns its routes; cleanup tracks only successful additions.
     run_cmd("powershell", &["-NoProfile", "-NonInteractive", "-Command",
-        "New-NetFirewallRule -Name 'OpenFlux.Windows.IPv6' -DisplayName 'OpenFlux VPN IPv6 guard' -Direction Outbound -RemoteAddress '::/0' -Action Block -ErrorAction Stop | Out-Null"])?;
+        include_str!("ipv6_guard.ps1")])?;
     // 4. Перехват трафика. Пир НЕ исключаем: транспорт всегда TURN
     //    (клиент на IP пира напрямую не стучится — только ChannelBind
     //    через релей), а исключение выкидывало весь хостинг на пиру

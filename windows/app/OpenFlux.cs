@@ -26,8 +26,8 @@ using Microsoft.Web.WebView2.Wpf;
 
 [assembly:System.Reflection.AssemblyTitle("OpenFlux")]
 [assembly:System.Reflection.AssemblyProduct("OpenFlux")]
-[assembly:System.Reflection.AssemblyVersion("1.0.1.0")]
-[assembly:System.Reflection.AssemblyFileVersion("1.0.1.0")]
+[assembly:System.Reflection.AssemblyVersion("1.0.2.0")]
+[assembly:System.Reflection.AssemblyFileVersion("1.0.2.0")]
 
 namespace OpenFlux {
 public class Profile {
@@ -177,7 +177,7 @@ public class MainWindow : Window {
         var sub=new StackPanel();sub.Children.Add(Text("Подписка",18));subscription=Text("Нажмите «Обновить»",18);subscription.Foreground=orange;subscription.Margin=new Thickness(0,12,0,10);sub.Children.Add(subscription);
         sub.Children.Add(Btn("Обновить",async()=>await RefreshSubscription(true),false));sub.Children.Add(Btn("Продлить подписку",()=>OpenUrl("https://2.56.174.146/renew"),false));p.Children.Add(Card(sub));
         var workerPanel=new StackPanel();var label=Text("Параллельные потоки: "+saved.workers,17);workerPanel.Children.Add(label);workers=new Slider{Minimum=3,Maximum=27,TickFrequency=3,IsSnapToTickEnabled=true,Value=saved.workers,Margin=new Thickness(0,18,0,10),IsEnabled=core==null||core.HasExited};workers.ValueChanged+=(s,e)=>{saved.workers=(int)workers.Value;label.Text="Параллельные потоки: "+saved.workers;try{Storage.Save(saved);}catch{}};workerPanel.Children.Add(workers);workerPanel.Children.Add(Text("Применяется при следующем подключении",12));p.Children.Add(Card(workerPanel));
-        p.Children.Add(Btn("Журнал VPN",()=>ShowLog(),false));p.Children.Add(Btn("Поддержка",()=>ShowChat(),true));p.Children.Add(Btn("Восстановить сеть",async()=>await Repair(),false));var id=Text("ID компьютера: "+saved.id+"\nOpenFlux 1.0.1 · Windows x64",11);id.Foreground=muted;id.Margin=new Thickness(0,18,0,4);p.Children.Add(id);
+        p.Children.Add(Btn("Журнал VPN",()=>ShowLog(),false));p.Children.Add(Btn("Поддержка",()=>ShowChat(),true));p.Children.Add(Btn("Восстановить сеть",async()=>await Repair(),false));var id=Text("ID компьютера: "+saved.id+"\nOpenFlux 1.0.2 · Windows x64",11);id.Foreground=muted;id.Margin=new Thickness(0,18,0,4);p.Children.Add(id);
         if(!preview)RefreshSubscription(false);
     }
     async Task Connect() {

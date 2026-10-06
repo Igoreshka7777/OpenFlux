@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 fn main() -> anyhow::Result<()> {
     if std::env::args().any(|a| a == "--version") {
-        println!("OpenFlux Windows 1.0.1 | CSQTT-WIRE-3");
+        println!("OpenFlux Windows 1.0.2 | CSQTT-WIRE-3");
         return Ok(());
     }
     #[cfg(windows)] csqtt_core::tun_win::teardown();
