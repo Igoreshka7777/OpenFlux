@@ -18,6 +18,18 @@ class Verify {
   Check(Profile.Parse(prefix.Replace("example.org","2.56.174.146")+"&token=t").Panel,"Main panel profile recognized");
   string clean=Redaction.Clean("error https://vk.ru/api?secret=hide&token=more password=test-secret",p);Check(!clean.Contains("test-secret")&&!clean.Contains("secret=hide"),"Credentials removed from logs");
   string dir=Path.Combine(Path.GetTempPath(),"OpenFlux-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);Storage.Dir=dir;Storage.FileName=Path.Combine(dir,"profile.dat");var saved=new Saved{link=prefix+"&token=test"};Storage.Save(saved);var restored=Storage.Load();Check(restored.link==saved.link&&restored.id==saved.id,"Encrypted profile and persistent device ID round trip");Check(!System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(Storage.FileName)).Contains("test-secret"),"Profile stored encrypted");File.Delete(Storage.FileName);Directory.Delete(dir);
-  var app=new Application();var w=new MainWindow(true);foreach(string page in new[]{"home","settings","support"}){w.Preview(page,Path.Combine(args[0],"OpenFlux-Windows-"+page+".png"));Check(true,"Rendered "+page);}Console.WriteLine("Verified "+tests+" checks");
+  var budget=new StartupBudget();bool expired=false;for(int i=0;i<90;i++)expired|=budget.Tick(false,false);Check(!expired,"Connection not interrupted at old 90-second deadline");
+  for(int i=0;i<150;i++)expired|=budget.Tick(true,false);Check(!expired&&budget.SecondsLeft==90,"Captcha time excluded from startup deadline");
+  for(int i=0;i<89;i++)expired|=budget.Tick(false,false);Check(!expired&&budget.Tick(false,false),"Unconfirmed connection eventually times out");
+  budget=new StartupBudget();for(int i=0;i<400;i++)expired=budget.Tick(false,true);Check(!expired&&budget.SecondsLeft==180,"Confirmed tunnel is never stopped by startup timeout");
+  var app=new Application();var w=new MainWindow(true);
+  var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+  var handle=typeof(MainWindow).GetMethod("HandleLine",flags);var ready=typeof(MainWindow).GetField("ready",flags);
+  handle.Invoke(w,new object[]{"[КЛИЕНТ] TUN-адаптер настроен"});Check(!(bool)ready.GetValue(w),"Readiness does not depend on diagnostic language");
+  handle.Invoke(w,new object[]{"__CSQTT_EVENT__|TUNNEL_READY|{}"});Check((bool)ready.GetValue(w),"Confirmed native tunnel readiness reaches GUI");
+  var add=typeof(MainWindow).GetMethod("AddLog",flags);var logs=(System.Collections.Generic.List<string>)typeof(MainWindow).GetField("logs",flags).GetValue(w);int count=logs.Count;
+  add.Invoke(w,new object[]{" \r\n "});Check(logs.Count==count,"Blank output does not flood journal");
+  add.Invoke(w,new object[]{"Repeated diagnostic"});add.Invoke(w,new object[]{"Repeated diagnostic"});Check(logs.Count==count+1&&logs[logs.Count-1].EndsWith("(x2)"),"Repeated diagnostics coalesced");
+  foreach(string page in new[]{"home","settings","support"}){w.Preview(page,Path.Combine(args[0],"OpenFlux-Windows-"+page+".png"));Check(true,"Rendered "+page);}Console.WriteLine("Verified "+tests+" checks");
  }
 }

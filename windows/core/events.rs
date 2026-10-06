@@ -69,6 +69,10 @@ impl Events {
         self.emit("CONFIG", &serde_json::json!({"config": config}));
     }
 
+    pub fn tunnel_ready(&self) {
+        self.emit("TUNNEL_READY", &serde_json::json!({}));
+    }
+
     pub fn error(&self, code: &str, message: &str, fatal: bool) {
         self.emit(
             "ERROR",

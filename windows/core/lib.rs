@@ -374,7 +374,8 @@ pub async fn run_client(arguments: ClientConfig, external_cancel: Option<Cancell
                 if let (true, Some(peer_ip)) = (native_tun, tun_peer_ip.as_deref()) {
                     match crate::tun_win::apply_tunconf(ip, dns, peer_ip).await {
                         Ok(()) => {
-                            crate::log_error!("[КЛИЕНТ] TUN-адаптер настроен (IP/DNS/маршруты)")
+                            crate::log_error!("[КЛИЕНТ] TUN-адаптер настроен (IP/DNS/маршруты)");
+                            config_events.tunnel_ready();
                         }
                         Err(error) => {
                             crate::log_error!("[ОШИБКА] Настройка TUN не удалась: {error:#}");

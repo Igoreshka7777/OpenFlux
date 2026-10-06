@@ -26,8 +26,8 @@ using Microsoft.Web.WebView2.Wpf;
 
 [assembly:System.Reflection.AssemblyTitle("OpenFlux")]
 [assembly:System.Reflection.AssemblyProduct("OpenFlux")]
-[assembly:System.Reflection.AssemblyVersion("1.0.0.0")]
-[assembly:System.Reflection.AssemblyFileVersion("1.0.0.0")]
+[assembly:System.Reflection.AssemblyVersion("1.0.1.0")]
+[assembly:System.Reflection.AssemblyFileVersion("1.0.1.0")]
 
 namespace OpenFlux {
 public class Profile {
@@ -83,6 +83,13 @@ public static class Redaction {
         return s.Length>1600?s.Substring(0,1600):s;
     }
 }
+public class StartupBudget {
+    public int SecondsLeft=180;
+    public bool Tick(bool waitingForCaptcha,bool connected) {
+        if(connected || waitingForCaptcha)return false;
+        return --SecondsLeft<=0;
+    }
+}
 public class MainWindow : Window {
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd,int attr,ref int value,int size);
     readonly Brush bg=new SolidColorBrush(Color.FromRgb(10,10,12)), fg=new SolidColorBrush(Color.FromRgb(247,246,246));
@@ -93,6 +100,10 @@ public class MainWindow : Window {
     Grid content; TextBlock state,hint,traffic,subscription,saveHint,chatHint; Ellipse ring; Button power;
     PasswordBox link; TextBox shownLink,chatText,logBox; Slider workers; StackPanel chatMessages;
     readonly List<string> logs=new List<string>();
+    string stopReason="", lastLog="", lastLogTime="";
+    int repetitions;
+    bool logDirty;
+    readonly DispatcherTimer logRefresh=new DispatcherTimer();
     readonly DispatcherTimer poll=new DispatcherTimer();
     System.Windows.Forms.NotifyIcon tray;
     bool noticesBusy;
@@ -115,12 +126,19 @@ public class MainWindow : Window {
         var settings=Btn("\uE713",()=>ShowSettings(),false); settings.FontFamily=new FontFamily("Segoe MDL2 Assets");settings.FontSize=23;settings.Padding=new Thickness(12,9,12,9);DockPanel.SetDock(settings,Dock.Right);header.Children.Add(settings);
         var logo=Text("",22);logo.Inlines.Add(new Run("●  "){Foreground=orange});logo.Inlines.Add("O P E N F L U X");logo.FontWeight=FontWeights.Bold;logo.VerticalAlignment=VerticalAlignment.Center;header.Children.Add(logo);
         content=new Grid();Grid.SetRow(content,1);root.Children.Add(header);root.Children.Add(content);Content=root;
-        Closing+=async (s,e)=>{ if(core!=null && !core.HasExited) {e.Cancel=true;closeAfter=true;await Stop();} else {poll.Stop();if(tray!=null)tray.Dispose();} };
+        Closing+=async (s,e)=>{ if(core!=null && !core.HasExited) {e.Cancel=true;closeAfter=true;await Stop("Приложение закрыто");} else {poll.Stop();logRefresh.Stop();if(tray!=null)tray.Dispose();} };
         if(!preview) {
             tray=new System.Windows.Forms.NotifyIcon {Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"OpenFlux.ico")),Text="OpenFlux",Visible=true};
             tray.DoubleClick+=(s,e)=>{Show();WindowState=WindowState.Normal;Activate();};
             tray.BalloonTipClicked+=(s,e)=>{Show();WindowState=WindowState.Normal;Activate();ShowChat();};
             poll.Interval=TimeSpan.FromSeconds(20);poll.Tick+=async(s,e)=>{await RefreshSubscription(false);if(ready)await Notices();if(chatMessages!=null)await LoadChat();};poll.Start();
+        }
+        if(!preview) {
+            string path=System.IO.Path.Combine(Storage.Dir,"last-session.log");
+            try {if(File.Exists(path))logs.AddRange(File.ReadAllLines(path).Reverse().Take(2000).Reverse());}catch{}
+            logRefresh.Interval=TimeSpan.FromMilliseconds(250);
+            logRefresh.Tick+=(s,e)=>{if(logDirty && logBox!=null){logBox.Text=String.Join(Environment.NewLine,logs);logBox.ScrollToEnd();logDirty=false;}};
+            logRefresh.Start();
         }
         if(saved.link=="") ShowWelcome();else ShowHome();
     }
@@ -143,7 +161,7 @@ public class MainWindow : Window {
         bool running=core!=null&&!core.HasExited;
         if(state==null || ring==null)return;
         state.Text=stopping?"ОТКЛЮЧЕНИЕ…":ready?"ПОДКЛЮЧЕНО":running?"ПОДКЛЮЧЕНИЕ…":"ОТКЛЮЧЕНО";
-        hint.Text=running?(ready?"Соединение установлено":"Ожидаем ответ сервера"):"Нажмите на круг, чтобы подключить VPN";
+        hint.Text=running?(ready?"Соединение установлено":"Ожидаем ответ сервера"):(stopReason!=""?stopReason:"Нажмите на круг, чтобы подключить VPN");
         ring.Stroke=running?orange:new SolidColorBrush(Color.FromRgb(69,66,73));power.Foreground=running?orange:muted;
         ring.Effect=running?new DropShadowEffect{Color=Colors.OrangeRed,BlurRadius=ready?30:15,ShadowDepth=0,Opacity=.85}:null;
         power.IsEnabled=!stopping;
@@ -159,7 +177,7 @@ public class MainWindow : Window {
         var sub=new StackPanel();sub.Children.Add(Text("Подписка",18));subscription=Text("Нажмите «Обновить»",18);subscription.Foreground=orange;subscription.Margin=new Thickness(0,12,0,10);sub.Children.Add(subscription);
         sub.Children.Add(Btn("Обновить",async()=>await RefreshSubscription(true),false));sub.Children.Add(Btn("Продлить подписку",()=>OpenUrl("https://2.56.174.146/renew"),false));p.Children.Add(Card(sub));
         var workerPanel=new StackPanel();var label=Text("Параллельные потоки: "+saved.workers,17);workerPanel.Children.Add(label);workers=new Slider{Minimum=3,Maximum=27,TickFrequency=3,IsSnapToTickEnabled=true,Value=saved.workers,Margin=new Thickness(0,18,0,10),IsEnabled=core==null||core.HasExited};workers.ValueChanged+=(s,e)=>{saved.workers=(int)workers.Value;label.Text="Параллельные потоки: "+saved.workers;try{Storage.Save(saved);}catch{}};workerPanel.Children.Add(workers);workerPanel.Children.Add(Text("Применяется при следующем подключении",12));p.Children.Add(Card(workerPanel));
-        p.Children.Add(Btn("Журнал VPN",()=>ShowLog(),false));p.Children.Add(Btn("Поддержка",()=>ShowChat(),true));p.Children.Add(Btn("Восстановить сеть",async()=>await Repair(),false));var id=Text("ID компьютера: "+saved.id+"\nOpenFlux 1.0.0 · Windows x64",11);id.Foreground=muted;id.Margin=new Thickness(0,18,0,4);p.Children.Add(id);
+        p.Children.Add(Btn("Журнал VPN",()=>ShowLog(),false));p.Children.Add(Btn("Поддержка",()=>ShowChat(),true));p.Children.Add(Btn("Восстановить сеть",async()=>await Repair(),false));var id=Text("ID компьютера: "+saved.id+"\nOpenFlux 1.0.1 · Windows x64",11);id.Foreground=muted;id.Margin=new Thickness(0,18,0,4);p.Children.Add(id);
         if(!preview)RefreshSubscription(false);
     }
     async Task Connect() {
@@ -167,19 +185,27 @@ public class MainWindow : Window {
             current=Profile.Parse(saved.link);
             string path=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"openflux-core.exe");
             if(!File.Exists(path))throw new Exception("Распакуйте весь архив OpenFlux: рядом с приложением должно быть сетевое ядро.");
-            ready=false;stopping=false;started=DateTime.UtcNow;int run=++generation;
+            ready=false;stopping=false;stopReason="";logs.Clear();lastLog="";started=DateTime.UtcNow;int run=++generation;
             var ps=new ProcessStartInfo(path){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,StandardOutputEncoding=Encoding.UTF8,StandardErrorEncoding=Encoding.UTF8,WorkingDirectory=AppDomain.CurrentDomain.BaseDirectory};
             core=new Process{StartInfo=ps,EnableRaisingEvents=true};var child=core;
             child.OutputDataReceived+=(s,e)=>{if(e.Data!=null)Dispatcher.BeginInvoke(new Action(()=>{if(run==generation)HandleLine(e.Data);}));};
-            child.ErrorDataReceived+=(s,e)=>{if(e.Data!=null)Dispatcher.BeginInvoke(new Action(()=>{if(run==generation)AddLog(e.Data);}));};
-            child.Exited+=(s,e)=>Dispatcher.BeginInvoke(new Action(()=>{if(run!=generation)return;ready=false;stopping=false;if(captcha!=null)captcha.Close();PaintState();AddLog("VPN остановлен");if(closeAfter)Close();}));
+            child.ErrorDataReceived+=(s,e)=>{if(e.Data!=null)Dispatcher.BeginInvoke(new Action(()=>{if(run==generation)HandleLine(e.Data);}));};
+            child.Exited+=(s,e)=>Task.Run(()=>{child.WaitForExit();Dispatcher.BeginInvoke(new Action(()=>{
+                if(run!=generation)return;ready=false;stopping=false;if(captcha!=null)captcha.Close();
+                if(stopReason=="")stopReason="Сетевое ядро завершилось (код "+child.ExitCode+"). Причина — в журнале.";
+                AddLog("VPN остановлен. Причина: "+stopReason);SaveLastLog();PaintState();if(closeAfter)Close();
+            }));});
             child.Start();child.BeginOutputReadLine();child.BeginErrorReadLine();child.StandardInput.WriteLine(current.Config(saved.id,saved.workers));child.StandardInput.Flush();PaintState();AddLog("Начато подключение к "+current.host);RefreshSubscription(false);
-            await Task.Delay(90000);
-            if(run==generation && !ready && core!=null&&!core.HasExited&&!stopping){AddLog("Сервер не подтвердил подключение за 90 секунд.");await Stop();}
+            var budget=new StartupBudget();
+            while(run==generation && !ready && !child.HasExited && !stopping) {
+                await Task.Delay(1000);
+                if(run!=generation || child.HasExited || stopping)break;
+                if(budget.Tick(captchaBusy,ready)){await Stop("Сервер не подтвердил настройку VPN за 3 минуты (время проверки VK не учитывается).");break;}
+            }
         } catch(Exception e) {AddLog(e.Message);MessageBox.Show(e.Message,"OpenFlux",MessageBoxButton.OK,MessageBoxImage.Information);PaintState();}
     }
-    async Task Stop() {
-        if(core==null||core.HasExited)return;stopping=true;PaintState();if(captcha!=null)captcha.Close();
+    async Task Stop(string reason="Отключено пользователем") {
+        if(core==null||core.HasExited||stopping)return;stopReason=Redaction.Clean(reason,current);AddLog("Причина остановки: "+stopReason);stopping=true;PaintState();if(captcha!=null)captcha.Close();
         var child=core;try{child.StandardInput.WriteLine("STOP");child.StandardInput.Flush();child.StandardInput.Close();}catch{}
         // Wait for route/DNS cleanup rather than killing the network process.
         for(int i=0;i<120 && !child.HasExited;i++)await Task.Delay(250);
@@ -194,16 +220,25 @@ public class MainWindow : Window {
         if(line.StartsWith("__CSQTT_EVENT__|")) {
             var parts=line.Split(new[]{'|'},3);if(parts.Length<3)return;
             try{var v=json.Deserialize<Dictionary<string,object>>(parts[2]);
+                if(parts[1]=="TUNNEL_READY") {ready=true;PaintState();}
                 if(parts[1]=="STATS") {if(traffic!=null)traffic.Text="Потоки: "+v["active"]+"  ·  Трафик: "+((Convert.ToDouble(v["bytes_up"])+Convert.ToDouble(v["bytes_down"]))/1048576).ToString("0.0")+" МБ";}
-                if(parts[1]=="ERROR"){string code=Convert.ToString(v["code"]);AddLog("Ошибка: "+Convert.ToString(v["message"]));if(v.ContainsKey("fatal")&&Convert.ToBoolean(v["fatal"]))Stop();}
+                if(parts[1]=="ERROR"){string code=Convert.ToString(v["code"]);AddLog("Ошибка: "+Convert.ToString(v["message"]));if(v.ContainsKey("fatal")&&Convert.ToBoolean(v["fatal"]))Stop(Convert.ToString(v["message"]));}
             }catch{}return;
         }
-        if(line.Contains("TUN-адаптер настроен")){ready=true;PaintState();}
-        if(line.Contains("Настройка TUN не удалась")){ready=false;Stop();}
+        // TUNNEL_READY confirms configuration independently of diagnostic wording.
+        if(line.Contains("Настройка TUN не удалась")){ready=false;Stop(line);}
         AddLog(line);
     }
-    void AddLog(string s) {s=Redaction.Clean(s,current);logs.Add(DateTime.Now.ToString("HH:mm:ss")+"  "+s);while(logs.Count>300)logs.RemoveAt(0);if(logBox!=null){logBox.Text=String.Join(Environment.NewLine,logs);logBox.ScrollToEnd();}}
-    void ShowLog() {var p=Page("Журнал VPN");logBox=new TextBox{Text=String.Join(Environment.NewLine,logs),IsReadOnly=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Height=420,FontFamily=new FontFamily("Consolas"),FontSize=12,Margin=new Thickness(0,18,0,10)};p.Children.Add(logBox);p.Children.Add(Btn("Копировать журнал",()=>{try{Clipboard.SetText(String.Join(Environment.NewLine,logs));}catch{}},false));p.Children.Add(Btn("Очистить",()=>{logs.Clear();logBox.Clear();},false));}
+    void AddLog(string s) {
+        s=Redaction.Clean(s,current).Trim();if(s=="")return;
+        if(s==lastLog&&logs.Count>0){repetitions++;logs[logs.Count-1]=lastLogTime+"  "+s+" (x"+repetitions+")";}
+        else{lastLog=s;lastLogTime=DateTime.Now.ToString("HH:mm:ss");repetitions=1;logs.Add(lastLogTime+"  "+s);}
+        while(logs.Count>2000)logs.RemoveAt(0);logDirty=true;
+    }
+    void SaveLastLog(){if(preview)return;try{Directory.CreateDirectory(Storage.Dir);File.WriteAllLines(System.IO.Path.Combine(Storage.Dir,"last-session.log"),logs,Encoding.UTF8);}catch{}}
+    void ExportLog(){var dlg=new Microsoft.Win32.SaveFileDialog{FileName="OpenFlux-журнал.txt",Filter="Текстовый журнал|*.txt"};if(dlg.ShowDialog(this)==true)try{File.WriteAllLines(dlg.FileName,logs,Encoding.UTF8);}catch{MessageBox.Show("Не удалось сохранить файл.","OpenFlux");}}
+
+    void ShowLog() {var p=Page("Журнал VPN");logBox=new TextBox{Text=String.Join(Environment.NewLine,logs),IsReadOnly=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Height=420,FontFamily=new FontFamily("Consolas"),FontSize=12,Margin=new Thickness(0,18,0,10)};p.Children.Add(logBox);p.Children.Add(Btn("Копировать журнал",()=>{try{Clipboard.SetText(String.Join(Environment.NewLine,logs));}catch{}},false));p.Children.Add(Btn("Сохранить журнал в файл",()=>ExportLog(),true));p.Children.Add(Btn("Очистить",()=>{logs.Clear();lastLog="";logBox.Clear();SaveLastLog();},false));}
     async Task<Dictionary<string,object>> Api(string route,string body=null) {
         var p=Profile.Parse(saved.link);if(!p.Panel)throw new Exception("Этот сервер не поддерживает панель OpenFlux.");
         using(var client=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false})) {
@@ -219,7 +254,7 @@ public class MainWindow : Window {
             else if(v["expires_at"]==null)caption="Без ограничения срока";
             else {double days=Math.Ceiling((Convert.ToDouble(v["expires_at"])-Convert.ToDouble(v["server_time"]))/86400);caption="Осталось дней: "+Math.Max(0,days);}
             if(subscription!=null)subscription.Text=caption;
-            if(status=="expired" && core!=null&&!core.HasExited){await Stop();if(MessageBox.Show("Подписка закончилась. Открыть страницу продления?","OpenFlux",MessageBoxButton.YesNo)==MessageBoxResult.Yes)OpenUrl("https://2.56.174.146/renew");}
+            if(status=="expired" && core!=null&&!core.HasExited){await Stop("Подписка закончилась");if(MessageBox.Show("Подписка закончилась. Открыть страницу продления?","OpenFlux",MessageBoxButton.YesNo)==MessageBoxResult.Yes)OpenUrl("https://2.56.174.146/renew");}
         }catch{if(subscription!=null)subscription.Text="Не удалось получить срок";if(explicitRequest)AddLog("Срок подписки временно недоступен. Это не мешает запуску VPN.");}finally{apiBusy=false;}
     }
     void ShowChat() {

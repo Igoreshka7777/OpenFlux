@@ -1,11 +1,11 @@
 // OpenFlux Windows process host. Configuration travels through stdin, never argv.
-use std::io::{self, BufRead, Write};
-use csqtt_core::{ClientConfig, set_events_enabled, set_log_callback};
+use std::io::{self, BufRead};
+use csqtt_core::{ClientConfig, set_events_enabled};
 use tokio_util::sync::CancellationToken;
 
 fn main() -> anyhow::Result<()> {
     if std::env::args().any(|a| a == "--version") {
-        println!("OpenFlux Windows 1.0.0 | CSQTT-WIRE-3");
+        println!("OpenFlux Windows 1.0.1 | CSQTT-WIRE-3");
         return Ok(());
     }
     #[cfg(windows)] csqtt_core::tun_win::teardown();
@@ -28,11 +28,8 @@ fn main() -> anyhow::Result<()> {
         let dll = std::env::current_exe()?.with_file_name("wintun.dll");
         csqtt_core::tun_win::set_dll_path_override(dll.to_string_lossy().into_owned());
     }
-    set_log_callback(Box::new(|line| {
-        let mut out = io::stdout().lock();
-        let _ = writeln!(out, "{line}");
-        let _ = out.flush();
-    }));
+    // The core already writes protocol events to stdout and diagnostics to stderr.
+    // An embedded callback here would duplicate both (including CAPTCHA_SOLVE).
     set_events_enabled(true);
     let cancel = CancellationToken::new();
     let stdin_cancel = cancel.clone();
@@ -47,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     });
     let result = rt.block_on(csqtt_core::run_client(config, Some(cancel)));
     // Includes failures before the core's ordinary shutdown path.
-    #[cfg(windows)] csqtt_core::tun_win::teardown();
+    #[cfg(windows)] if result.is_err() { csqtt_core::tun_win::teardown(); }
     rt.shutdown_timeout(std::time::Duration::from_secs(3));
     if result.is_err() {
         println!("__OPENFLUX_ERROR__|Не удалось запустить подключение. Проверьте ссылку и журнал.");
