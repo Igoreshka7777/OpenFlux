@@ -84,6 +84,7 @@ public static class Redaction {
     }
 }
 public class MainWindow : Window {
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd,int attr,ref int value,int size);
     readonly Brush bg=new SolidColorBrush(Color.FromRgb(10,10,12)), fg=new SolidColorBrush(Color.FromRgb(247,246,246));
     readonly Brush muted=new SolidColorBrush(Color.FromRgb(155,151,160)), orange=new SolidColorBrush(Color.FromRgb(255,130,38));
     readonly JavaScriptSerializer json=new JavaScriptSerializer();
@@ -94,15 +95,19 @@ public class MainWindow : Window {
     readonly List<string> logs=new List<string>();
     readonly DispatcherTimer poll=new DispatcherTimer();
     System.Windows.Forms.NotifyIcon tray;
+    bool noticesBusy;
+    readonly HashSet<int> noticesShown=new HashSet<int>();
     public MainWindow(bool isPreview) {
         preview=isPreview; Title="OpenFlux"; Width=540;Height=780;MinWidth=460;MinHeight=660;
         Background=bg;Foreground=fg;FontFamily=new FontFamily("Segoe UI");FontSize=14;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
+        SourceInitialized+=(s,e)=>{int dark=1;try{DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle,20,ref dark,4);}catch{}};
         Icon=BitmapFrame.Create(new Uri(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"OpenFlux.png")));
         Resources=(ResourceDictionary)XamlReader.Parse(@"<ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
 <Style TargetType='Button'><Setter Property='Background' Value='#29262E'/><Setter Property='Foreground' Value='#FFFFFF'/><Setter Property='BorderThickness' Value='0'/><Setter Property='Padding' Value='20,12'/><Setter Property='FontWeight' Value='SemiBold'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Margin' Value='0,4,0,4'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'><Border x:Name='B' Background='{TemplateBinding Background}' CornerRadius='15' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='B' Property='Opacity' Value='.82'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter TargetName='B' Property='Opacity' Value='.45'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
 <Style TargetType='TextBox'><Setter Property='Background' Value='#17151B'/><Setter Property='Foreground' Value='White'/><Setter Property='CaretBrush' Value='White'/><Setter Property='BorderBrush' Value='#49434E'/><Setter Property='Padding' Value='12'/><Setter Property='SelectionBrush' Value='#F47D24'/><Setter Property='FontSize' Value='14'/></Style>
-<Style TargetType='PasswordBox'><Setter Property='Background' Value='#17151B'/><Setter Property='Foreground' Value='White'/><Setter Property='CaretBrush' Value='White'/><Setter Property='BorderBrush' Value='#49434E'/><Setter Property='Padding' Value='12'/></Style></ResourceDictionary>");
+<Style TargetType='PasswordBox'><Setter Property='Background' Value='#17151B'/><Setter Property='Foreground' Value='White'/><Setter Property='CaretBrush' Value='White'/><Setter Property='BorderBrush' Value='#49434E'/><Setter Property='Padding' Value='12'/></Style>
+<Style TargetType='ScrollBar'><Setter Property='Width' Value='8'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollBar'><Grid Background='#0A0A0C'><Track x:Name='PART_Track' IsDirectionReversed='True'><Track.DecreaseRepeatButton><RepeatButton Command='ScrollBar.PageUpCommand' Opacity='0'/></Track.DecreaseRepeatButton><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'><Border Background='#49434E' CornerRadius='4' Margin='2,0'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command='ScrollBar.PageDownCommand' Opacity='0'/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter></Style></ResourceDictionary>");
         try { saved=preview?new Saved():Storage.Load(); } catch { saved=new Saved(); AddLog("Не удалось прочитать сохранённую ссылку. Вставьте её заново."); }
         if(!preview) { try { Storage.Save(saved); } catch { AddLog("Не удалось сохранить настройки компьютера."); } }
         var root=new Grid {Margin=new Thickness(28,18,28,24)}; root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
@@ -114,7 +119,8 @@ public class MainWindow : Window {
         if(!preview) {
             tray=new System.Windows.Forms.NotifyIcon {Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"OpenFlux.ico")),Text="OpenFlux",Visible=true};
             tray.DoubleClick+=(s,e)=>{Show();WindowState=WindowState.Normal;Activate();};
-            poll.Interval=TimeSpan.FromSeconds(20);poll.Tick+=async(s,e)=>{await RefreshSubscription(false);if(chatMessages!=null)await LoadChat();};poll.Start();
+            tray.BalloonTipClicked+=(s,e)=>{Show();WindowState=WindowState.Normal;Activate();ShowChat();};
+            poll.Interval=TimeSpan.FromSeconds(20);poll.Tick+=async(s,e)=>{await RefreshSubscription(false);if(ready)await Notices();if(chatMessages!=null)await LoadChat();};poll.Start();
         }
         if(saved.link=="") ShowWelcome();else ShowHome();
     }
@@ -229,6 +235,10 @@ public class MainWindow : Window {
             if(target.Children.Count==0)target.Children.Add(Text("Напишите нам — поможем с подключением."));
         }catch{if(target==chatMessages)chatHint.Text="Переписка недоступна. Проверьте интернет и ссылку.";}
     }
+    async Task Notices() {
+        if(noticesBusy||tray==null)return;noticesBusy=true;
+        try{var v=await Api("messages");foreach(Dictionary<string,object> m in (System.Collections.IEnumerable)v["messages"]){if(!ready)break;int id=Convert.ToInt32(m["id"]);string body=Convert.ToString(m["body"]);if(noticesShown.Add(id))tray.ShowBalloonTip(10000,"Сообщение OpenFlux",body,System.Windows.Forms.ToolTipIcon.Info);await Api("messages/"+id+"/seen","{}");break;}}catch{}finally{noticesBusy=false;}
+    }
     async void ShowCaptcha(string line) {
         if(captchaBusy){SendControl("CAPTCHA_RESULT|error:busy");return;}
         var parts=line.Split('|');Uri url;
@@ -249,7 +259,7 @@ public class MainWindow : Window {
     static bool VkHost(string h){return new[]{"vk.com","vk.ru","vk.me","vkuser.net"}.Any(d=>h==d||h.EndsWith("."+d,StringComparison.OrdinalIgnoreCase));}
     void SendControl(string command){try{if(core!=null&&!core.HasExited){core.StandardInput.WriteLine(command);core.StandardInput.Flush();}}catch{}}
     static void OpenUrl(string url){Uri u;if(Uri.TryCreate(url,UriKind.Absolute,out u)&&u.Scheme=="https")try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}catch{MessageBox.Show("Не удалось открыть браузер.","OpenFlux");}}
-    public void Preview(string page,string output) {if(page=="settings")ShowSettings();else if(page=="support")ShowChat();else ShowHome();var view=(FrameworkElement)Content;view.Measure(new Size(540,760));view.Arrange(new Rect(0,0,540,760));view.UpdateLayout();var drawing=new DrawingVisual();using(var dc=drawing.RenderOpen()){dc.DrawRectangle(bg,null,new Rect(0,0,540,760));dc.DrawRectangle(new VisualBrush(view),null,new Rect(0,0,540,760));}var bmp=new RenderTargetBitmap(540,760,96,96,PixelFormats.Pbgra32);bmp.Render(drawing);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using(var f=File.Create(output))png.Save(f);}
+    public void Preview(string page,string output) {if(page=="settings")ShowSettings();else if(page=="support")ShowChat();else ShowHome();var view=(FrameworkElement)Content;view.Measure(new Size(540,760));view.Arrange(new Rect(0,0,540,760));view.UpdateLayout();var drawing=new DrawingVisual();using(var dc=drawing.RenderOpen()){dc.DrawRectangle(bg,null,new Rect(0,0,540,760));}var bmp=new RenderTargetBitmap(540,760,96,96,PixelFormats.Pbgra32);bmp.Render(drawing);bmp.Render(view);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using(var f=File.Create(output))png.Save(f);}
 }
 public static class Program {
     [STAThread] public static void Main(string[] args) {
