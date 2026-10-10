@@ -1342,6 +1342,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             settings.mtu = NSNumber(value: mtuInt)
         }
 
+        let providerConfig = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
+        if includeDefaultRoute,
+           providerConfig?[HotspotCompatibility.configurationKey] as? Bool == true {
+            HotspotCompatibility.apply(to: settings, ipv4Only: providerConfig?["use_csqtt"] as? Bool ?? false)
+            logMsg("[OpenFlux] Совместимость с раздачей включена; маршруты телефона через VPN; строгая блокировка отключена")
+        }
+
         return settings
     }
 

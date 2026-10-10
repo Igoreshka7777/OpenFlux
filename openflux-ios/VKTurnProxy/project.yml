@@ -91,7 +91,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.igoreshka7777.openflux
         CODE_SIGN_ENTITLEMENTS: VKTurnProxy/VKTurnProxy.entitlements
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: 453
+        CURRENT_PROJECT_VERSION: 454
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Pre-bootstrap captcha probe in connect() calls Go-side
         # wgProbeVKCreds directly from main-app process (the only context
@@ -161,6 +161,7 @@ targets:
       # and an imported backup is not a trusted source.
       - path: VKTurnProxy/TunnelMTU.swift
       - path: VKTurnProxy/SubscriptionAccess.swift
+      - path: VKTurnProxy/HotspotCompatibility.swift
     info:
       path: PacketTunnel/Info.plist
       properties:
@@ -175,7 +176,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.igoreshka7777.openflux.tunnel
         CODE_SIGN_ENTITLEMENTS: PacketTunnel/PacketTunnel.entitlements
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: 453
+        CURRENT_PROJECT_VERSION: 454
         SKIP_INSTALL: YES
         SWIFT_OBJC_BRIDGING_HEADER: PacketTunnel/BridgeHeader.h
         OTHER_LDFLAGS:
@@ -222,7 +223,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.igoreshka7777.openflux.widget
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: 453
+        CURRENT_PROJECT_VERSION: 454
         SKIP_INSTALL: YES
     dependencies:
       - sdk: WidgetKit.framework

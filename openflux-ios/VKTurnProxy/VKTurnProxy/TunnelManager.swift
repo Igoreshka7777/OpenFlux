@@ -1105,10 +1105,12 @@ class TunnelManager: ObservableObject {
             }
 
             // Set provider configuration
+            let hotspotCompatibility = UserDefaults.standard.bool(forKey: HotspotCompatibility.preferenceKey)
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = "org.igoreshka7777.openflux.tunnel"
             proto.serverAddress = serverAddress
             proto.providerConfiguration = [
+                HotspotCompatibility.configurationKey: hotspotCompatibility,
                 "wg_config": wgConfig,
                 // WHICH profile this session is running. The extension ignores
                 // both keys; they exist so that an app relaunched over a live
@@ -1140,37 +1142,17 @@ class TunnelManager: ObservableObject {
                 "vk_cookie_links": config.cookieLinks
             ]
 
-            // Full-tunnel mode (Step 4 of the APNs-through-tunnel refactor).
-            // includeAllNetworks=true is the ONLY documented mechanism that
-            // pulls APNs (Apple Push Notification Service) traffic into the
-            // VPN on iOS — which is the goal of this whole refactor: pushes
-            // keep arriving when the device is on Wi-Fi going through the
-            // tunnel.
-            //
-            // Trade-offs we accept:
-            //  - excludedRoutes become inert (Apple ignores them). So the
-            //    only always-excluded destinations are: serverAddress
-            //    (set to the TURN relay IP above, see Step 3), Apple's
-            //    built-in always-excluded list (DHCP, captive networks,
-            //    cellular-services-direct…), and — iOS 16.4+ — whatever
-            //    we gate with the flags below.
-            //  - excludeLocalNetworks=true keeps LAN reachable even with
-            //    the full tunnel up (printers, AirPlay, etc.).
-            //  - excludeAPNs=false / excludeCellularServices=false
-            //    (both iOS 16.4+) override Apple's default where these
-            //    system-service categories bypass the tunnel — we want
-            //    them IN the tunnel so the user on Wi-Fi keeps receiving
-            //    pushes via our VPS.
-            //
-            // Saving a profile whose includeAllNetworks changed re-prompts
-            // iOS for VPN permission on the next connect. This is a
-            // one-time UX cost for existing users.
-            proto.includeAllNetworks = true
+            // Strict routing remains the default. Compatibility is selected
+            // explicitly in Settings and applied only on the next connection.
+            proto.includeAllNetworks = HotspotCompatibility.includeAllNetworks(enabled: hotspotCompatibility)
+            // false/false is a normal routed VPN, NOT our diagnostic DIRECT mode.
+            proto.enforceRoutes = false
             proto.excludeLocalNetworks = true
             if #available(iOS 16.4, *) {
-                proto.excludeAPNs = false
-                proto.excludeCellularServices = false
+                proto.excludeAPNs = hotspotCompatibility
+                proto.excludeCellularServices = hotspotCompatibility
             }
+            SharedLogger.shared.log("[OpenFlux] hotspot compatibility=\(hotspotCompatibility); strict routing=\(proto.includeAllNetworks)")
 
             let apply = { (m: NETunnelProviderManager) in
                 m.protocolConfiguration = proto
@@ -1491,7 +1473,8 @@ class TunnelManager: ObservableObject {
             var previousEnforce = false
             if #available(iOS 14.2, *) { previousEnforce = proto.enforceRoutes }
 
-            proto.includeAllNetworks = !direct
+            let hotspotCompatibility = proto.providerConfiguration?[HotspotCompatibility.configurationKey] as? Bool ?? false
+            proto.includeAllNetworks = HotspotCompatibility.includeAllNetworks(enabled: hotspotCompatibility, direct: direct)
             if #available(iOS 14.2, *) { proto.enforceRoutes = direct }
             manager.protocolConfiguration = proto
             do {

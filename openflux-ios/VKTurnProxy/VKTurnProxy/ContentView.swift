@@ -707,6 +707,7 @@ enum ServerMode: Int, CaseIterable, Identifiable {
 // MARK: - Settings Screen
 
 struct SettingsView: View {
+    @AppStorage(HotspotCompatibility.preferenceKey) private var hotspotCompatibility = false
     @Environment(\.presentationMode) private var presentationMode
     // Only the two GLOBAL settings live here. Every per-server field moved to
     // ServerEditView (build 173-180) and is edited through ServerStore; the 20
@@ -937,6 +938,18 @@ struct SettingsView: View {
                         Text("Измените после отключения VPN")
                             .font(.caption)
                             .foregroundColor(OpenFluxStyle.muted)
+                    }
+                }
+
+                OpenFluxCard {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Toggle("Совместимость с раздачей", isOn: $hotspotCompatibility)
+                            .font(.system(size: 17, weight: .semibold))
+                            .disabled(tunnel.status != .disconnected && tunnel.status != .invalid)
+                        Text("Включите, если устройства без интернета при раздаче с iPhone. Изменяйте после отключения VPN, затем подключитесь снова.")
+                            .font(.caption).foregroundColor(OpenFluxStyle.muted)
+                        Text("VPN iPhone не распространяется на подключённые устройства. В этом режиме при обрыве VPN телефон может выйти в интернет напрямую.")
+                            .font(.caption).foregroundColor(OpenFluxStyle.muted)
                     }
                 }
 
