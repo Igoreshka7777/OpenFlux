@@ -24,7 +24,7 @@ check(settings.ipv4Settings?.excludedRoutes?.first?.destinationAddress == "172.2
 check(settings.ipv4Settings?.excludedRoutes?.first?.destinationSubnetMask == "255.255.255.240", "Local exclusion is limited to hotspot subnet")
 check(settings.dnsSettings?.servers == ["8.8.8.8", "8.8.4.4"], "Configured DNS remains unchanged")
 check(settings.dnsSettings?.matchDomains == [""], "Phone DNS applies to all domains")
-check(settings.ipv6Settings?.includedRoutes?.first?.networkPrefixLength.intValue == 0, "Unsupported public IPv6 cannot bypass VPN")
+check(settings.ipv6Settings?.includedRoutes?.first?.destinationNetworkPrefixLength.intValue == 0, "Unsupported public IPv6 cannot bypass VPN")
 check(settings.ipv6Settings?.excludedRoutes?.count == 2, "IPv6 exclusions are local only")
 
 let other = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "192.0.2.2")
