@@ -263,9 +263,9 @@ private struct OpenFluxInitialLinkView: View {
                         Text("ВАШ ДОСТУП")
                             .font(.system(size: 12, weight: .semibold)).tracking(3)
                             .foregroundColor(OpenFluxStyle.orange)
-                        Text("Получить OpenFlux")
+                        Text("Оплата доступа")
                             .font(.system(size: 30, weight: .bold))
-                        Text("Личный доступ к подключению на телефоне.")
+                        Text("Ваш OpenFlux. Ещё 30 дней на связи.")
                             .foregroundColor(OpenFluxStyle.muted)
                     }
                     OpenFluxCard {
@@ -277,11 +277,23 @@ private struct OpenFluxInitialLinkView: View {
                                 Text("250 ₽").font(.system(size: 38, weight: .bold))
                                 Text("/ 30 дней").foregroundColor(OpenFluxStyle.muted)
                             }
-                            Text("Оплатите доступ по реквизитам. После подтверждения оплаты личная ссылка появится автоматически.")
+                            Rectangle()
+                                .fill(OpenFluxStyle.border)
+                                .frame(height: 1)
+                            HStack(alignment: .top, spacing: 12) {
+                                paymentStep("01", "Заявка")
+                                paymentStep("02", "Оплата")
+                                paymentStep("03", "Подключение")
+                            }
+                            Text("Оформите заявку и оплатите по реквизитам. После подтверждения оплаты личная ссылка появится автоматически.")
                                 .font(.system(size: 14))
                                 .foregroundColor(OpenFluxStyle.muted)
+                                .fixedSize(horizontal: false, vertical: true)
                             Button { showAccessPortal = true } label: {
-                                Text("ПОЛУЧИТЬ")
+                                HStack(spacing: 10) {
+                                    Text("ПЕРЕЙТИ К ОПЛАТЕ")
+                                    Image(systemName: "arrow.right")
+                                }
                                     .font(.system(size: 17, weight: .bold))
                                     .frame(maxWidth: .infinity).frame(height: 54)
                             }
@@ -335,6 +347,20 @@ private struct OpenFluxInitialLinkView: View {
                 }
             }
         }
+    }
+
+    private func paymentStep(_ number: String, _ title: String) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(number)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(OpenFluxStyle.orange)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.8)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
