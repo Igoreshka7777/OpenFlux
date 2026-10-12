@@ -15,4 +15,12 @@ precondition(!access("expired", 1_000).expired)
 let data = Data("{\"state\":\"active\",\"expires_at\":87401,\"server_time\":1000}".utf8)
 let decoded = try JSONDecoder().decode(SubscriptionAccess.self, from: data)
 precondition(decoded.daysRemaining == 2)
+precondition(shouldOfferAccessLink(hasCredential: false, status: nil))
+precondition(shouldOfferAccessLink(hasCredential: true, status: access("disabled", 5_000)))
+precondition(shouldOfferAccessLink(hasCredential: true, status: access("expired", 999)))
+precondition(!shouldOfferAccessLink(hasCredential: true, status: nil))
+for state in ["active", "unavailable", "error"] {
+    precondition(!shouldOfferAccessLink(hasCredential: true, status: access(state, 5_000)))
+}
+precondition(!shouldOfferAccessLink(hasCredential: true, status: access("expired", nil)))
 print("Subscription checks passed")

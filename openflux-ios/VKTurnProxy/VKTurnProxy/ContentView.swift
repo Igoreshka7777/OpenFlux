@@ -348,7 +348,7 @@ private struct OpenFluxAccessPortal: UIViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.isOpaque = false
         view.backgroundColor = UIColor(red: 0.035, green: 0.035, blue: 0.04, alpha: 1)
-        view.load(URLRequest(url: URL(string: "https://193.233.223.211/get")!))
+        view.load(URLRequest(url: URL(string: "https://2.56.174.146/checkout")!))
         return view
     }
 
@@ -366,7 +366,14 @@ private struct OpenFluxAccessPortal: UIViewRepresentable {
                 onLinkOpened(url.absoluteString)
                 return
             }
-            decisionHandler(url.scheme == "https" && url.host == "193.233.223.211" ? .allow : .cancel)
+            if action.navigationType == .linkActivated &&
+                ["https://t.me/Igorekk777", "https://vk.ru/id39833875"].contains(url.absoluteString) {
+                decisionHandler(.cancel)
+                UIApplication.shared.open(url)
+                return
+            }
+            let trustedHosts = ["193.233.223.211", "2.56.174.146", "openfluxvpn.ru", "www.openfluxvpn.ru"]
+            decisionHandler(url.scheme == "https" && trustedHosts.contains(url.host ?? "") ? .allow : .cancel)
         }
     }
 }
@@ -588,8 +595,65 @@ private struct ActiveServerControls: View {
                 .foregroundColor(Color(red: 0.59, green: 0.56, blue: 0.59))
                 .multilineTextAlignment(.center)
 
+            OpenFluxGetLinkButton()
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct OpenFluxGetLinkButton: View {
+    @ObservedObject private var store = ServerStore.shared
+    @ObservedObject private var monitor = SubscriptionMonitor.shared
+    @State private var showPortal = false
+    @State private var error = ""
+    @State private var showError = false
+
+    private var password: String { store.activeServer.csqttPassword }
+    private var shouldShow: Bool {
+        shouldOfferAccessLink(hasCredential: !password.isEmpty, status: monitor.entries[password]?.status)
+    }
+
+    var body: some View {
+        Group {
+            if shouldShow {
+                Button { showPortal = true } label: {
+                    Text("Получить ссылку")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(LinearGradient(
+                            colors: [Color(red: 1, green: 0.35, blue: 0.09), Color(red: 1, green: 0.59, blue: 0.11)],
+                            startPoint: .leading, endPoint: .trailing), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+            }
+        }
+        .fullScreenCover(isPresented: $showPortal) {
+            NavigationView {
+                OpenFluxAccessPortal { link in
+                    do {
+                        let parsed = try BackupManager.parseConnectionLinkString(link)
+                        _ = ConnectionLinkPrompt.apply(parsed)
+                        UserDefaults.standard.set(link, forKey: "openFluxConnectionLink")
+                        showPortal = false
+                    } catch {
+                        self.error = "Не удалось принять ссылку: \(error.localizedDescription)"
+                        showError = true
+                    }
+                }
+                .navigationTitle("Получить ссылку")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Назад") { showPortal = false }
+                    }
+                }
+                .alert("OpenFlux", isPresented: $showError) {
+                    Button("ОК", role: .cancel) {}
+                } message: { Text(error) }
+            }
+        }
     }
 }
 

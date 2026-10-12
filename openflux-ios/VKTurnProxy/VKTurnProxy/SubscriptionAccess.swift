@@ -25,6 +25,10 @@ struct SubscriptionAccess: Decodable, Equatable {
     }
 }
 
+func shouldOfferAccessLink(hasCredential: Bool, status: SubscriptionAccess?) -> Bool {
+    !hasCredential || status?.expired == true || status?.state == "disabled"
+}
+
 private final class SubscriptionRedirectPolicy: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
