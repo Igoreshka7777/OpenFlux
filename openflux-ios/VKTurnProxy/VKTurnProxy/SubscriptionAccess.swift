@@ -40,8 +40,8 @@ private final class SubscriptionRedirectPolicy: NSObject, URLSessionTaskDelegate
 }
 
 enum SubscriptionAPI {
-    static let renewalURL = URL(string: "https://2.56.174.146/renew")!
-    private static let endpoint = URL(string: "https://2.56.174.146/api/client/subscription")!
+    static let renewalURL = URL(string: "https://openfluxvpn.ru/renew")!
+    private static let endpoint = URL(string: "https://openfluxvpn.ru/api/client/subscription")!
     private static let session = URLSession(configuration: .ephemeral,
         delegate: SubscriptionRedirectPolicy(), delegateQueue: nil)
 
@@ -82,7 +82,7 @@ enum SubscriptionNotices {
         guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
         let content = UNMutableNotificationContent()
         content.title = "Подписка OpenFlux закончилась"
-        content.body = "Откройте OpenFlux, чтобы продлить доступ через Telegram или ВКонтакте."
+        content.body = "Откройте OpenFlux, чтобы продлить доступ на сайте."
         content.sound = .default
         content.userInfo = ["open_subscription_renewal": true]
         preferences.set(NSNumber(value: expiry), forKey: key)

@@ -29,7 +29,7 @@ private final class SupportChatModel: ObservableObject {
     @Published var sending = false
     private var pollTask: Task<Void, Never>?
     private var pendingNonce: String?
-    private let endpoint = URL(string: "https://2.56.174.146/api/client/conversation")!
+    private let endpoint = URL(string: "https://openfluxvpn.ru/api/client/conversation")!
 
     func start(password: String) {
         pollTask?.cancel()

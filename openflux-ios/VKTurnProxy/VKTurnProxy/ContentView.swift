@@ -270,14 +270,14 @@ private struct OpenFluxInitialLinkView: View {
                     }
                     OpenFluxCard {
                         VStack(alignment: .leading, spacing: 18) {
-                            Text("ДОСТУП НА МЕСЯЦ")
+                            Text("ДОСТУП НА 30 ДНЕЙ")
                                 .font(.system(size: 12, weight: .semibold)).tracking(2)
                                 .foregroundColor(OpenFluxStyle.muted)
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text("250 ₽").font(.system(size: 38, weight: .bold))
-                                Text("/ месяц").foregroundColor(OpenFluxStyle.muted)
+                                Text("/ 30 дней").foregroundColor(OpenFluxStyle.muted)
                             }
-                            Text("Оплата и автоматическая выдача ссылки пока не подключены. Сейчас ссылку выдаёт администратор OpenFlux.")
+                            Text("Оплатите доступ по реквизитам. После подтверждения оплаты личная ссылка появится автоматически.")
                                 .font(.system(size: 14))
                                 .foregroundColor(OpenFluxStyle.muted)
                             Button { showAccessPortal = true } label: {
@@ -348,7 +348,7 @@ private struct OpenFluxAccessPortal: UIViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.isOpaque = false
         view.backgroundColor = UIColor(red: 0.035, green: 0.035, blue: 0.04, alpha: 1)
-        view.load(URLRequest(url: URL(string: "https://2.56.174.146/checkout")!))
+        view.load(URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout")!))
         return view
     }
 
@@ -372,7 +372,7 @@ private struct OpenFluxAccessPortal: UIViewRepresentable {
                 UIApplication.shared.open(url)
                 return
             }
-            let trustedHosts = ["193.233.223.211", "2.56.174.146", "openfluxvpn.ru", "www.openfluxvpn.ru"]
+            let trustedHosts = ["openfluxvpn.ru", "www.openfluxvpn.ru"]
             decisionHandler(url.scheme == "https" && trustedHosts.contains(url.host ?? "") ? .allow : .cancel)
         }
     }
