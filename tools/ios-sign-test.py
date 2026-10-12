@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import secrets
 import stat
 import subprocess
@@ -21,6 +22,9 @@ def run(args):
     result = subprocess.run(args, capture_output=True, timeout=120)
     if result.returncode:
         # Tool output can include signing identity and other personal data.
+        if Path(args[0]).name == 'codesign':
+            detail = re.sub(r'"[^"\n]+"', '"[redacted]"', result.stderr.decode('utf-8','replace'))
+            raise RuntimeError('codesign: ' + detail[:1500])
         raise RuntimeError('Signing command failed: ' + Path(args[0]).name)
     return result.stdout
 
