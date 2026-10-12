@@ -75,8 +75,16 @@ def main():
             run(['security','create-keychain','-p',keypass,str(keychain)])
             run(['security','set-keychain-settings','-lut','1200',str(keychain)])
             run(['security','unlock-keychain','-p',keypass,str(keychain)])
+            run(['security','list-keychains','-d','user','-s',str(keychain)])
             run(['security','import',str(p12),'-k',str(keychain),'-P',data['password'],'-T','/usr/bin/codesign'])
+            # Preserve any issuing certificates shipped alongside the identity.
+            for index, issuer in enumerate(chain or []):
+                issuer_file=work/('issuer-'+str(index)+'.cer')
+                issuer_file.write_bytes(issuer.public_bytes(serialization.Encoding.DER))
+                run(['security','import',str(issuer_file),'-k',str(keychain)])
             run(['security','set-key-partition-list','-S','apple-tool:,apple:','-s','-k',keypass,str(keychain)])
+            identities=run(['security','find-identity','-v','-p','codesigning',str(keychain)]).decode('utf-8','replace')
+            report['identity_available']=identity in identities
             package=work/'package';package.mkdir()
             run(['ditto','-x','-k',str(ipa.resolve()),str(package)])
             app=package/'Payload/OpenFlux.app'
