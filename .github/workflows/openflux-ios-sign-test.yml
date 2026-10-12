@@ -1,0 +1,42 @@
+name: OpenFlux iOS signing test
+on:
+  push:
+    branches: [codex/ios-signing-test]
+    paths:
+      - '.github/workflows/openflux-ios-sign-test.yml'
+      - 'tools/ios-sign-test.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: openflux-ios-signing-test
+  cancel-in-progress: false
+jobs:
+  signing-test:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: OpenFlux-iOS-454-unsigned
+          run-id: 38055679553
+          github-token: ${{ github.token }}
+          path: unsigned
+      - name: Prepare isolated signing tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sign-venv"
+          "$RUNNER_TEMP/sign-venv/bin/pip" install --quiet cryptography==47.0.0
+      - name: Test existing certificate and sign app
+        env:
+          SIGN_TEST_INPUT: ${{ secrets.OPENFLUX_IOS_SIGN_TEST_INPUT }}
+        run: '"$RUNNER_TEMP/sign-venv/bin/python" tools/ios-sign-test.py'
+      - name: Upload encrypted test and verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlux-iOS-454-signing-test
+          path: signing-result/*
+          if-no-files-found: error
+          retention-days: 3
