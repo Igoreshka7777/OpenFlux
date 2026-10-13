@@ -190,6 +190,34 @@ private struct OpenFluxInitialLinkView: View {
     @State private var error = ""
     @State private var showLinkEntry = false
     @State private var showAccessPortal = false
+    @State private var pricing: AccessPricing?
+    @Environment(\.scenePhase) private var scenePhase
+
+    private struct AccessPricing: Decodable {
+        let amount: Int
+        let regular: Int
+        let active: Bool
+        let title: String
+
+        func rubles(_ value: Int) -> String {
+            value % 100 == 0 ? "\(value / 100) ₽" : String(format: "%.2f ₽", Double(value) / 100)
+        }
+    }
+
+    @MainActor private func refreshPrice() async {
+        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/api/public/pricing")!)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 12
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { pricing = nil; return }
+            let value = try JSONDecoder().decode(AccessPricing.self, from: data)
+            guard value.amount > 0, value.regular >= value.amount else { pricing = nil; return }
+            pricing = value
+        } catch {
+            pricing = nil
+        }
+    }
 
     private var hasExistingAccess: Bool {
         let server = ServerStore.shared.activeServer
@@ -273,9 +301,21 @@ private struct OpenFluxInitialLinkView: View {
                             Text("ДОСТУП НА 30 ДНЕЙ")
                                 .font(.system(size: 12, weight: .semibold)).tracking(2)
                                 .foregroundColor(OpenFluxStyle.muted)
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("250 ₽").font(.system(size: 38, weight: .bold))
-                                Text("/ 30 дней").foregroundColor(OpenFluxStyle.muted)
+                            if let pricing = pricing {
+                                if pricing.active {
+                                    HStack {
+                                        Text(pricing.title).foregroundColor(OpenFluxStyle.orange)
+                                        Text(pricing.rubles(pricing.regular)).strikethrough()
+                                            .foregroundColor(OpenFluxStyle.muted)
+                                    }.font(.system(size: 14, weight: .semibold))
+                                }
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(pricing.rubles(pricing.amount)).font(.system(size: 38, weight: .bold))
+                                    Text("/ 30 дней").foregroundColor(OpenFluxStyle.muted)
+                                }
+                            } else {
+                                Text("Актуальная цена — на странице оплаты")
+                                    .font(.system(size: 20, weight: .semibold))
                             }
                             Rectangle()
                                 .fill(OpenFluxStyle.border)
@@ -323,6 +363,10 @@ private struct OpenFluxInitialLinkView: View {
         .foregroundColor(.white)
         .background(OpenFluxStyle.background.ignoresSafeArea())
         .interactiveDismissDisabled()
+        .task { await refreshPrice() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { Task { await refreshPrice() } }
+        }
         .fullScreenCover(isPresented: $showAccessPortal) {
             NavigationView {
                 OpenFluxAccessPortal { receivedLink in
