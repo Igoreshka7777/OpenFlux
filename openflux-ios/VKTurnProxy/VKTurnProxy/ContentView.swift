@@ -408,8 +408,13 @@ private struct OpenFluxInitialLinkView: View {
     }
 }
 
-private struct OpenFluxAccessPortal: UIViewRepresentable {
+struct OpenFluxAccessPortal: UIViewRepresentable {
+    let password: String?
     let onLinkOpened: (String) -> Void
+    init(password: String? = nil, onLinkOpened: @escaping (String) -> Void) {
+        self.password = password
+        self.onLinkOpened = onLinkOpened
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(onLinkOpened: onLinkOpened) }
 
@@ -418,7 +423,11 @@ private struct OpenFluxAccessPortal: UIViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.isOpaque = false
         view.backgroundColor = UIColor(red: 0.035, green: 0.035, blue: 0.04, alpha: 1)
-        view.load(URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout")!))
+        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout")!)
+        if let password = password, !password.isEmpty {
+            request = IOSCheckoutRequest.make(password: password)
+        }
+        view.load(request)
         return view
     }
 

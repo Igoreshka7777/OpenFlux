@@ -363,6 +363,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         Task { [weak self] in
             guard let self = self else { return }
             defer { self.finishSubscriptionCheck() }
+            let policy = await IOSUpdateAPI.fetch()
+            guard !self.stopRequested else { return }
+            if policy?.required(for: IOSUpdateAPI.build) == true {
+                self.stopClientNotices()
+                self.cancelTunnelWithError(Self.csqttStopError("Обновите OpenFlux, чтобы продолжить подключение."))
+                return
+            }
             guard let access = await SubscriptionAPI.fetch(password: password), !self.stopRequested else { return }
             if access.expired, let expiry = access.expiresAt {
                 await SubscriptionNotices.show(password: password, expiry: expiry)
@@ -424,6 +431,24 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // MARK: - Tunnel Lifecycle
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        backendLock.lock()
+        _stopRequested = false
+        backendLock.unlock()
+        Task {
+            let policy = await IOSUpdateAPI.fetch()
+            guard !self.stopRequested else {
+                completionHandler(NSError(domain: "OpenFlux", code: 2, userInfo: [NSLocalizedDescriptionKey: "Подключение отменено."]))
+                return
+            }
+            guard policy?.required(for: IOSUpdateAPI.build) != true else {
+                completionHandler(NSError(domain: "OpenFlux", code: 1, userInfo: [NSLocalizedDescriptionKey: "Обновите OpenFlux, чтобы подключиться."]))
+                return
+            }
+            self.startAllowedTunnel(options: options, completionHandler: completionHandler)
+        }
+    }
+
+    private func startAllowedTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
 
         // Log the extension's CFBundleVersion ($(CURRENT_PROJECT_VERSION)
         // from project.yml) on every tunnel start so post-mortem log
@@ -435,9 +460,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // behavior.
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         logMsg("startTunnel called (build \(build))")
-        backendLock.lock()
-        _stopRequested = false
-        backendLock.unlock()
+        guard !stopRequested else { completionHandler(Self.stoppedDuringStartError()); return }
         startPathMonitoring()
 
         // Set Go timezone BEFORE wgSetLogFilePath so the first Go log line

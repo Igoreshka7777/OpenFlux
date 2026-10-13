@@ -441,6 +441,8 @@ class TunnelManager: ObservableObject {
     /// checked after each wait and, in applyConfigurationAndStart, right before
     /// startVPNTunnel(); the settle sleep there throws on it.
     private func runConnectAttempt(config: TunnelConfig) async {
+        await IOSUpdateMonitor.shared.refresh()
+        if IOSUpdateMonitor.shared.required || attemptCancelled() { return }
         var config = config
         if config.useCsqtt {
             let access = await SubscriptionMonitor.shared.refresh(password: config.csqttPassword, presentAgain: true)

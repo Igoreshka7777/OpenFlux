@@ -39,11 +39,12 @@ struct SubscriptionPresentationHost: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var store = ServerStore.shared
     @ObservedObject private var monitor = SubscriptionMonitor.shared
+    @ObservedObject private var updates = IOSUpdateMonitor.shared
     @State private var dismissedPresentation: Int?
     private var password: String { store.activeServer.useCsqtt ? store.activeServer.csqttPassword : "" }
     private var entry: SubscriptionMonitor.Entry? { monitor.entries[password] }
     private var presented: Binding<Bool> {
-        Binding(get: { entry?.status.expired == true && entry?.presentation != dismissedPresentation },
+        Binding(get: { updates.showUpdate || (entry?.status.expired == true && entry?.presentation != dismissedPresentation) },
                 set: { if !$0 { dismissedPresentation = entry?.presentation } })
     }
 
@@ -59,8 +60,19 @@ struct SubscriptionPresentationHost: View {
                     do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
                 }
             }
+            .task(id: scenePhase == .active) {
+                guard scenePhase == .active else { return }
+                while !Task.isCancelled {
+                    await updates.refresh()
+                    do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { return }
+                }
+            }
             .fullScreenCover(isPresented: presented) {
-                SubscriptionRenewalView(password: password) { dismissedPresentation = entry?.presentation }
+                if updates.showUpdate {
+                    IOSUpdateView()
+                } else {
+                    SubscriptionRenewalView(password: password) { dismissedPresentation = entry?.presentation }
+                }
             }
     }
 }
@@ -126,8 +138,14 @@ struct SubscriptionRenewalView: View {
     let onClose: () -> Void
     @State private var checking = false
     @State private var message = ""
-    @State private var loadFailed = false
+    @State private var showPayment = false
 
+    private func section(_ number: String, _ title: String) -> some View {
+        HStack(spacing: 16) {
+            Text(number + "  /  " + title).font(.system(size: 11, weight: .bold)).tracking(1)
+            Rectangle().fill(OpenFluxStyle.orange.opacity(0.4)).frame(height: 1)
+        }.foregroundColor(OpenFluxStyle.orange)
+    }
     var body: some View {
         VStack(spacing: 12) {
             HStack {
@@ -135,20 +153,31 @@ struct SubscriptionRenewalView: View {
                 Spacer()
                 Text("Подписка").font(.headline)
             }.padding(.horizontal, 20).padding(.top, 16)
-            if loadFailed {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Spacer()
-                    Text("Подписка закончилась").font(.largeTitle.bold())
-                    Text("Продлите доступ через администратора. Если интернет недоступен, подключитесь к Wi-Fi или мобильной сети.")
-                        .foregroundColor(OpenFluxStyle.muted)
-                    Link("Продлить в Telegram ↗", destination: URL(string: "https://t.me/Igorekk777")!)
-                        .font(.headline).foregroundColor(OpenFluxStyle.orange)
-                    Link("Написать ВКонтакте ↗", destination: URL(string: "https://vk.ru/id39833875")!)
-                        .font(.headline).foregroundColor(OpenFluxStyle.orange)
-                    Spacer()
-                }.padding(26)
-            } else {
-                SubscriptionRenewalWebView(onFailure: { loadFailed = true })
+                    Text("●  OPENFLUX").font(.system(size: 23, weight: .bold)).tracking(3).foregroundColor(OpenFluxStyle.orange)
+                    Text("Продлите\nподписку").font(.system(size: 38, weight: .bold))
+                    Text("Срок доступа закончился. Вернитесь к подключению за несколько шагов.").foregroundColor(OpenFluxStyle.muted)
+                    section("01", "ПРОДЛЕНИЕ")
+                    OpenFluxCard {
+                        VStack(alignment: .leading, spacing: 18) {
+                            Text("Ещё 30 дней с OpenFlux").font(.title3.bold())
+                            Text("Ваша подписка уже выбрана. Актуальная цена и реквизиты откроются на следующем экране.").foregroundColor(OpenFluxStyle.muted)
+                            Button { showPayment = true } label: {
+                                Text("Продлить подписку →").font(.headline).frame(maxWidth: .infinity).padding(18)
+                                    .background(LinearGradient(colors: [.orange, OpenFluxStyle.orange], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 14))
+                            }
+                            Text("После перевода нажмите «Я оплатил». Доступ продлится после подтверждения администратором.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
+                        }
+                    }
+                    section("02", "НУЖНА ПОМОЩЬ")
+                    Text("Связаться с администратором").font(.footnote).foregroundColor(OpenFluxStyle.muted)
+                    HStack {
+                        Link("Telegram ↗", destination: URL(string: "https://t.me/Igorekk777")!)
+                        Spacer()
+                        Link("ВКонтакте ↗", destination: URL(string: "https://vk.ru/id39833875")!)
+                    }.font(.headline).padding(18).background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 14))
+                }.padding(24)
             }
             if !message.isEmpty { Text(message).font(.footnote).foregroundColor(OpenFluxStyle.muted).padding(.horizontal, 20) }
             Button {
@@ -156,64 +185,33 @@ struct SubscriptionRenewalView: View {
                 Task {
                     let status = await SubscriptionMonitor.shared.refresh(password: password)
                     checking = false
-                    if let status = status {
-                        message = status.expired ? "Продление ещё не подтверждено. Свяжитесь с администратором." : ""
-                        if status.state == "active" { onClose() }
-                    } else {
-                        message = "Не удалось проверить подписку. Проверьте интернет и повторите."
-                    }
+                    if status?.state == "active" { onClose() }
+                    else { message = status == nil ? "Не удалось проверить доступ. Проверьте интернет и повторите." : "Продление ещё не подтверждено. Если уже оплатили, повторно платить не нужно." }
                 }
             } label: {
-                Text(checking ? "Проверяем…" : "Я продлил — проверить доступ")
+                Text(checking ? "Проверяем…" : "Я оплатил — проверить доступ")
                     .font(.subheadline.bold()).frame(maxWidth: .infinity).padding(16)
                     .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 14))
             }.disabled(checking).padding(.horizontal, 16).padding(.bottom, 12)
         }
-        .foregroundColor(.white)
-        .background(OpenFluxStyle.background.ignoresSafeArea())
-        .interactiveDismissDisabled()
-    }
-}
-
-private struct SubscriptionRenewalWebView: UIViewRepresentable {
-    let onFailure: () -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(onFailure: onFailure) }
-    func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-        let view = WKWebView(frame: .zero, configuration: configuration)
-        view.navigationDelegate = context.coordinator
-        view.isOpaque = false
-        view.backgroundColor = UIColor(red: 0.035, green: 0.035, blue: 0.04, alpha: 1)
-        var request = URLRequest(url: SubscriptionAPI.renewalURL)
-        request.timeoutInterval = 12
-        view.load(request)
-        return view
-    }
-    func updateUIView(_ view: WKWebView, context: Context) {}
-    static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
-        view.stopLoading()
-        view.navigationDelegate = nil
-    }
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        let onFailure: () -> Void
-        init(onFailure: @escaping () -> Void) { self.onFailure = onFailure }
-        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard let url = action.request.url else { decisionHandler(.cancel); return }
-            if url == SubscriptionAPI.renewalURL { decisionHandler(.allow); return }
-            decisionHandler(.cancel)
-            if action.navigationType == .linkActivated && ["https://t.me/Igorekk777", "https://vk.ru/id39833875"].contains(url.absoluteString) {
-                UIApplication.shared.open(url)
+        .foregroundColor(.white).background(OpenFluxStyle.background.ignoresSafeArea()).interactiveDismissDisabled()
+        .fullScreenCover(isPresented: $showPayment) {
+            NavigationView {
+                OpenFluxAccessPortal(password: password) { link in
+                    do {
+                        let parsed = try BackupManager.parseConnectionLinkString(link)
+                        _ = ConnectionLinkPrompt.apply(parsed)
+                        UserDefaults.standard.set(link, forKey: "openFluxConnectionLink")
+                        showPayment = false
+                        onClose()
+                    } catch { message = "Не удалось принять ссылку. Свяжитесь с администратором."; showPayment = false }
+                }
+                .navigationTitle("Продлить подписку").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) { Button("Назад") { showPayment = false } }
+                    ToolbarItem(placement: .navigationBarTrailing) { Link("Помощь ↗", destination: URL(string: "https://t.me/Igorekk777")!) }
+                }
             }
-        }
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { onFailure() }
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { onFailure() }
-        func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
-                     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-            if let http = response.response as? HTTPURLResponse, http.statusCode >= 400 {
-                decisionHandler(.cancel); onFailure()
-            } else { decisionHandler(.allow) }
         }
     }
 }
