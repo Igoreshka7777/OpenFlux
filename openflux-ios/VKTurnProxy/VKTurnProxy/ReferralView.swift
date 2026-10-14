@@ -58,73 +58,62 @@ struct ReferralView: View {
         return (formatter.string(from: NSDecimalNumber(decimal: Decimal(kopecks) / 100)) ?? "—") + " ₽"
     }
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if password.isEmpty {
-                    Text("Добавьте личную ссылку подключения в настройках, чтобы увидеть баланс и приглашения.")
-                        .foregroundColor(OpenFluxStyle.muted)
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("ВАШ БАЛАНС").font(.system(size: 12, weight: .bold)).tracking(2)
-                        Text(summary.map { money($0.balance) } ?? "— ₽")
-                            .font(.system(size: 60, weight: .heavy, design: .rounded))
-                            .minimumScaleFactor(0.45).lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Доступно бонусных рублей").font(.subheadline).foregroundColor(Color(red: 0.88, green: 0.82, blue: 0.76))
-                        if let data = summary, data.held > 0 {
-                            Text("В обработке: \(money(data.held))").font(.caption).foregroundColor(OpenFluxStyle.muted)
-                        }
-                        if !error.isEmpty && summary != nil {
-                            Text("Показаны последние полученные данные").font(.caption)
-                        }
-                    }
-                    .foregroundColor(OpenFluxStyle.orange).padding(24)
-                    .background(Color(red: 0.13, green: 0.10, blue: 0.06), in: RoundedRectangle(cornerRadius: 24))
-                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(OpenFluxStyle.orange.opacity(0.65)))
-                    OpenFluxCard {
-                        HStack {
-                            Text("Приглашено друзей")
-                            Spacer()
-                            Text(summary.map { String($0.count) } ?? "—")
-                                .font(.system(size: 32, weight: .bold)).foregroundColor(OpenFluxStyle.orange)
-                        }
-                    }
-                    OpenFluxCard {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Ваша реферальная ссылка").font(.headline)
-                            Text("Приглашайте друзей по этой ссылке. Здесь появятся ваши бонусы за их оплаты.")
-                                .font(.subheadline).foregroundColor(OpenFluxStyle.muted)
-                            if let data = summary {
-                                Text(data.url).font(.subheadline).foregroundColor(OpenFluxStyle.orange).textSelection(.enabled)
-                                Button {
-                                    UIPasteboard.general.string = data.url; copied = true
-                                } label: {
-                                    Text(copied ? "Ссылка скопирована ✓" : "Копировать ссылку")
-                                        .font(.system(size: 16, weight: .bold)).frame(maxWidth: .infinity).padding(16)
-                                        .background(OpenFluxStyle.orange, in: RoundedRectangle(cornerRadius: 16))
-                                }.buttonStyle(.plain)
-                                Button { sharing = true } label: {
-                                    Text("Поделиться").font(.system(size: 16, weight: .semibold))
-                                        .frame(maxWidth: .infinity).padding(16)
-                                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(OpenFluxStyle.border))
-                                }.buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    if !error.isEmpty { Text(error).font(.subheadline).foregroundColor(Color(red: 1, green: 0.70, blue: 0.65)) }
-                    Button { refresh += 1 } label: {
-                        HStack {
-                            if loading { ProgressView().tint(OpenFluxStyle.orange) }
-                            Text(loading ? "Обновляем…" : "Обновить данные")
-                        }.frame(maxWidth: .infinity).padding(16)
-                            .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 16))
-                    }.disabled(loading).buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Реферальная программа").font(.system(size: 22, weight: .bold))
+            if password.isEmpty {
+                Text("Добавьте личную ссылку подключения, чтобы увидеть баланс и приглашения.")
+                    .foregroundColor(OpenFluxStyle.muted)
+            } else {
+                Text("Ваш баланс").foregroundColor(OpenFluxStyle.muted)
+                Text(summary.map { money($0.balance) } ?? "— ₽")
+                    .font(.system(size: 54, weight: .heavy, design: .rounded))
+                    .foregroundColor(OpenFluxStyle.orange)
+                    .minimumScaleFactor(0.4).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let data = summary, data.held > 0 {
+                    Text("В обработке: \(money(data.held))").font(.caption).foregroundColor(OpenFluxStyle.muted)
                 }
-            }.padding(24)
+                HStack {
+                    Text("Приглашено друзей").foregroundColor(OpenFluxStyle.muted)
+                    Spacer()
+                    Text(summary.map { String($0.count) } ?? "—").font(.system(size: 24, weight: .bold))
+                }
+                Rectangle().fill(OpenFluxStyle.orange.opacity(0.75)).frame(height: 1)
+                Text("Ваша реферальная ссылка").font(.subheadline).foregroundColor(OpenFluxStyle.muted)
+                if let data = summary {
+                    Text(data.url).font(.system(size: 14)).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(14)
+                        .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(OpenFluxStyle.border))
+                    HStack(spacing: 10) {
+                        Button { UIPasteboard.general.string = data.url; copied = true } label: {
+                            Text(copied ? "Скопировано ✓" : "Копировать")
+                                .font(.system(size: 14, weight: .bold)).frame(maxWidth: .infinity, minHeight: 48)
+                                .background(OpenFluxStyle.orange, in: RoundedRectangle(cornerRadius: 14))
+                        }.buttonStyle(.plain)
+                        Button { sharing = true } label: {
+                            Text("Поделиться").font(.system(size: 14, weight: .bold))
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(OpenFluxStyle.orange))
+                        }.buttonStyle(.plain)
+                    }
+                }
+                if !error.isEmpty {
+                    if summary != nil { Text("Показаны последние полученные данные").font(.caption).foregroundColor(OpenFluxStyle.muted) }
+                    Text(error).font(.caption).foregroundColor(Color(red: 1, green: 0.70, blue: 0.65))
+                }
+                Button { refresh += 1 } label: {
+                    HStack {
+                        if loading { ProgressView().tint(OpenFluxStyle.orange) }
+                        Text(loading ? "Обновляем…" : "Обновить баланс").font(.caption)
+                    }.frame(maxWidth: .infinity, minHeight: 32).foregroundColor(OpenFluxStyle.muted)
+                }.disabled(loading).buttonStyle(.plain)
+            }
         }
-        .background(OpenFluxStyle.background.ignoresSafeArea())
+        .frame(maxWidth: .infinity, alignment: .leading).padding(20)
+        .background(LinearGradient(colors: [Color(red: 0.09, green: 0.08, blue: 0.09), Color(red: 0.19, green: 0.125, blue: 0.08)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(OpenFluxStyle.orange))
         .foregroundColor(.white)
-        .navigationTitle("Реферальная программа").navigationBarTitleDisplayMode(.inline)
         .task(id: "\(password):\(refresh)") {
             guard !password.isEmpty else { summary = nil; return }
             loading = true; error = ""
