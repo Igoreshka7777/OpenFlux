@@ -10,7 +10,7 @@ final class IOSUpdateMonitor: ObservableObject {
     var showUpdate: Bool { required || (policy?.available(for: IOSUpdateAPI.build) == true && policy?.latestBuild != deferredBuild) }
     func refresh() async {
         policy = await IOSUpdateAPI.fetch(force: true)
-        if required { TunnelManager.shared.disconnect() }
+        // Keep the VPN available while the user downloads the update.
     }
     func deferOptional() { if !required { deferredBuild = policy?.latestBuild ?? 0 } }
 }
