@@ -187,6 +187,7 @@ struct ContentView: View {
 private struct OpenFluxInitialLinkView: View {
     let onImported: () -> Void
     @State private var link = ""
+    @State private var resolvingLink = false
     @State private var error = ""
     @State private var showLinkEntry = false
     @State private var showAccessPortal = false
@@ -266,23 +267,29 @@ private struct OpenFluxInitialLinkView: View {
                                 Text(error).font(.caption).foregroundColor(OpenFluxStyle.red)
                             }
                             Button {
+                                guard !resolvingLink else { return }
+                                resolvingLink = true; error = ""
+                                Task { @MainActor in
+                                defer { resolvingLink = false }
                                 do {
-                                    let parsed = try BackupManager.parseConnectionLinkString(link)
+                                    let resolved = try await OpenFluxShortLink.resolve(link)
+                                    let parsed = try BackupManager.parseConnectionLinkString(resolved)
                                     _ = ConnectionLinkPrompt.apply(parsed)
-                                    UserDefaults.standard.set(link.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    UserDefaults.standard.set(resolved,
                                                               forKey: "openFluxConnectionLink")
                                     onImported()
                                 } catch {
                                     self.error = "Проверьте ссылку подключения: \(error.localizedDescription)"
                                 }
+                                }
                             } label: {
-                                Text("ПРОДОЛЖИТЬ")
+                                Text(resolvingLink ? "ПОЛУЧАЕМ НАСТРОЙКИ…" : "ПРОДОЛЖИТЬ")
                                     .font(.system(size: 16, weight: .bold))
                                     .frame(maxWidth: .infinity).frame(height: 52)
                             }
                             .foregroundColor(.white)
                             .background(OpenFluxStyle.accent, in: RoundedRectangle(cornerRadius: 14))
-                            .disabled(link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(resolvingLink || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .opacity(link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
                         }
                     }
@@ -898,6 +905,7 @@ struct SettingsView: View {
     @State private var alertTitle: String = ""
     @State private var connectionLinkInput = ""
     @State private var connectionLinkStatus = ""
+    @State private var resolvingConnection = false
     @State private var workerDraft = 30.0
     @State private var showFullScreenSupport = false
 
@@ -1028,7 +1036,7 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(OpenFluxStyle.muted)
                         } else {
-                            Text(connectionLinkInput.isEmpty ? "Вставьте личную ссылку csqtt://" : "Ссылка сохранена")
+                            Text(connectionLinkInput.isEmpty ? "Вставьте короткую ссылку или csqtt://" : "Ссылка сохранена")
                                 .font(.caption)
                                 .foregroundColor(OpenFluxStyle.muted)
                         }
@@ -1043,16 +1051,23 @@ struct SettingsView: View {
                                     connectionLinkStatus = "Ссылка сохранена"
                                     return
                                 }
+                                resolvingConnection = true
+                                connectionLinkStatus = "Получаем настройки…"
+                                Task { @MainActor in
+                                defer { resolvingConnection = false }
                                 do {
-                                    let parsed = try BackupManager.parseConnectionLinkString(value)
+                                    let resolved = try await OpenFluxShortLink.resolve(value)
+                                    let parsed = try BackupManager.parseConnectionLinkString(resolved)
                                     _ = ConnectionLinkPrompt.apply(parsed)
-                                    UserDefaults.standard.set(value, forKey: "openFluxConnectionLink")
+                                    connectionLinkInput = resolved
+                                    UserDefaults.standard.set(resolved, forKey: "openFluxConnectionLink")
                                     connectionLinkStatus = "Ссылка сохранена"
                                 } catch {
-                                    connectionLinkStatus = "Проверьте ссылку подключения."
+                                    connectionLinkStatus = "Не удалось получить настройки. Проверьте ссылку и интернет."
+                                }
                                 }
                             }
-                            .disabled(connectionLinkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(resolvingConnection || connectionLinkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                         .font(.system(size: 14, weight: .semibold))
                     }
@@ -1335,13 +1350,19 @@ struct SettingsView: View {
             alertMessage = "Сначала скопируйте ссылку подключения csqtt://, затем нажмите ещё раз."
             return
         }
+        guard !resolvingConnection else { return }
+        resolvingConnection = true
+        Task { @MainActor in
+        defer { resolvingConnection = false }
         do {
-            let link = try BackupManager.parseConnectionLinkString(raw)
+            let resolved = try await OpenFluxShortLink.resolve(raw)
+            let link = try BackupManager.parseConnectionLinkString(resolved)
             pendingConnectionLink = link
             showConnectionLinkConfirm = true
         } catch {
             alertTitle = ConnectionLinkPrompt.invalidTitle
             alertMessage = error.localizedDescription
+        }
         }
     }
 

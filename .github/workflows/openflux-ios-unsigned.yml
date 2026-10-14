@@ -47,6 +47,10 @@ jobs:
         run: |
           swiftc VKTurnProxy/VKTurnProxy/HotspotCompatibility.swift tools/hotspotcheck/main.swift -o "$RUNNER_TEMP/hotspotcheck"
           "$RUNNER_TEMP/hotspotcheck"
+      - name: Check short connection URL boundaries
+        run: |
+          swiftc VKTurnProxy/VKTurnProxy/OpenFluxShortLink.swift tools/shortlinkcheck/main.swift -o "$RUNNER_TEMP/shortlinkcheck"
+          "$RUNNER_TEMP/shortlinkcheck"
       - name: Build iPhone networking bridge
         run: |
           set -euo pipefail
@@ -85,7 +89,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-460-unsigned
+          name: OpenFlux-iOS-461-unsigned
           path: |
             openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
             openflux-ios/build_output/SHA256SUMS.txt
@@ -95,7 +99,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-460-build-log
+          name: OpenFlux-iOS-461-build-log
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7

@@ -1,0 +1,11 @@
+import Foundation
+let valid = "https://openfluxvpn.ru/s/abcdefghijklmnopqrstuv"
+precondition(OpenFluxShortLink.accepts(valid))
+for bad in [valid + "?x=1", valid + "#x", valid + "/", String(valid.dropLast()),
+            valid.replacingOccurrences(of: "https", with: "http"),
+            valid.replacingOccurrences(of: "openfluxvpn.ru", with: "openfluxvpn.ru.evil.test"),
+            valid.replacingOccurrences(of: "/s/", with: "/r/"),
+            valid.replacingOccurrences(of: "openfluxvpn.ru", with: "user@openfluxvpn.ru")] {
+    precondition(!OpenFluxShortLink.accepts(bad))
+}
+print("Short URL allowlist passed")
