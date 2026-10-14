@@ -1075,6 +1075,16 @@ struct SettingsView: View {
 
                 SubscriptionSettingsCard(password: store.activeServer.useCsqtt ? store.activeServer.csqttPassword : "")
 
+                NavigationLink(destination: ReferralView(password: store.activeServer.useCsqtt ? store.activeServer.csqttPassword : "").id(store.activeServer.csqttPassword)) {
+                    OpenFluxCard {
+                        HStack {
+                            Text("Реферальная программа").font(.system(size: 18, weight: .bold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }.foregroundColor(OpenFluxStyle.orange)
+                    }
+                }.buttonStyle(.plain)
+
                 OpenFluxCard {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
