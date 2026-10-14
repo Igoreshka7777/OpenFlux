@@ -131,7 +131,7 @@ struct ReferralView: View {
             defer { loading = false }
             do { summary = try await ReferralAPI.fetch(password: password) }
             catch is CancellationError { }
-            catch { if !Task.isCancelled { error = "Не удалось обновить данные. Проверьте соединение и повторите." } }
+            catch { if !Task.isCancelled { self.error = "Не удалось обновить данные. Проверьте соединение и повторите." } }
         }
         .sheet(isPresented: $sharing) {
             if let data = summary { ShareSheet(activityItems: ["Присоединяйся к OpenFlux: \(data.url)"]) }
