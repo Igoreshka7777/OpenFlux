@@ -8,7 +8,7 @@
 Подключитесь по SSH к **своему роутеру** и выполните:
 
 ```sh
-curl -fL --proto '=https' --proto-redir '=https' https://github.com/Igoreshka7777/OpenFlux/releases/download/openwrt-v0.1.2-r1/install.sh -o /tmp/openflux-install.sh && sh /tmp/openflux-install.sh
+curl -fL --proto '=https' --proto-redir '=https' https://github.com/Igoreshka7777/OpenFlux/releases/download/openwrt-v0.1.2-r2/install.sh -o /tmp/openflux-install.sh && sh /tmp/openflux-install.sh
 ```
 
 Если curl отсутствует, установите `curl ca-bundle` из репозитория своей прошивки.
@@ -57,10 +57,14 @@ sh /tmp/openflux-install.sh --download-only
 ## Сборка и публикация
 
 GitHub Actions **OpenFlux OpenWrt** проверяет клиент и собирает пять пакетов.
-Публикация запускается тегом `openwrt-v0.1.2-r1`. Секрет репозитория
+Публикация запускается тегом `openwrt-v0.1.2-r2`. Секрет репозитория
 `OPENWRT_SIGNING_KEY` содержит отдельный ключ APK. Он нужен только release job;
 pull request проверки не получают ключ. Публичный ключ закреплён в установщике.
 Для новой версии обновите номера в `install.sh`, `build-apk.sh` и README.
 
 Исходники транспорта и лицензии включены в `vendor`; исходный модуль указан
 в `NOTICE.txt`. Сертификаты iPhone и настройки других приложений не используются.
+
+Сборка первого релиза выполнена отдельно: GitHub временно приостановил Actions
+для этого форка. Для следующих автоматических релизов владелец должен снова
+включить Actions на странице репозитория. Готовые пакеты устанавливаются независимо от Actions.

@@ -1,7 +1,7 @@
 #!/bin/sh
 # OpenFlux online installer for APK-based OpenWrt. Does not start the VPN.
 set -eu
-VERSION=0.1.2-r1
+VERSION=0.1.2-r2
 BASE="https://github.com/Igoreshka7777/OpenFlux/releases/download/openwrt-v$VERSION"
 KEY_SHA256=aa1adf87b3da4b9a9811d707c6ecf3dbeefa367bc51456325c271a41df421ee3
 die() { printf 'OpenFlux: %s\n' "$*" >&2; exit 1; }
@@ -22,7 +22,10 @@ case "$arch" in
 esac
 ram=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
 free_space=$(df -k /overlay | awk 'END {print $4}')
-[ "$ram" -ge 120000 ] && [ "$free_space" -ge 30000 ] || die 'Requires 128 MB RAM and at least 30 MB free overlay'
+[ "$ram" -ge 120000 ] || die 'Requires 128 MB RAM'
+if [ "$mode" != download ]; then
+ [ "$free_space" -ge 30000 ] || die "Requires at least 30 MB free overlay; available: $free_space KiB"
+fi
 command -v sha256sum >/dev/null || die 'sha256sum is required'
 if command -v curl >/dev/null; then
  fetch() { curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 300 --retry 2 "$1" -o "$2"; }
