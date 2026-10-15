@@ -1,5 +1,6 @@
 name: OpenFlux OpenWrt
 on:
+  workflow_dispatch:
   push:
     branches: ['main', 'codex/openflux-openwrt-installer']
     tags: ['openwrt-v*']
