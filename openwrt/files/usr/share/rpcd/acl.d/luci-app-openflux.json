@@ -1,0 +1,15 @@
+{
+  "luci-app-openflux": {
+    "description": "OpenFlux settings and connection control",
+    "read": {
+      "uci": ["openflux"],
+      "file": { "/var/run/openflux/status.json": ["read"], "/etc/openflux/direct-domains.txt": ["read"] },
+      "ubus": { "file": ["read"] }
+    },
+    "write": {
+      "uci": ["openflux"],
+      "file": { "/etc/init.d/openflux": ["exec"], "/usr/libexec/openflux-network": ["exec"], "/etc/openflux/direct-domains.txt": ["write"] },
+      "ubus": { "file": ["exec", "write"], "uci": ["commit"] }
+    }
+  }
+}

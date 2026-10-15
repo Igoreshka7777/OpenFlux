@@ -1,0 +1,172 @@
+#!/bin/sh
+# Own table, rule and UCI sections only. A short-lived set makes crashes fail open.
+# OpenWrt network.sh intentionally reads initially unset cache variables.
+set -e
+STATE=/etc/openflux/network-state
+umask 077
+mkdir -p "$STATE"
+. /lib/functions/network.sh
+
+check_wan() {
+	/usr/bin/openflux-client --check || return 1
+	wan=$(uci -q get openflux.main.wan)
+	case "$wan" in ''|*[!a-zA-Z0-9_]*) echo 'Некорректное имя WAN' >&2; return 1;; esac
+	network_get_device wan_dev "$wan" || { echo 'Не найден интерфейс WAN' >&2; return 1; }
+	default_dev=$(ip -4 route get 1.1.1.1 | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -n 1)
+	[ "$default_dev" = "$wan_dev" ] || { echo 'Сейчас интернет идёт через другой VPN. Перед подключением OpenFlux отключите старый VPN и верните основной маршрут через WAN.' >&2; return 1; }
+}
+
+direct() {
+	if nft list table inet openflux >/dev/null 2>&1; then
+		nft flush set inet openflux active_lan
+	fi
+}
+
+cleanup() {
+	direct
+	if [ -e "$STATE/prepared" ]; then
+		ip rule del pref 10222 fwmark 0x4f00/0xffff lookup 20220 2>/dev/null || true
+		ip route flush table 20220 2>/dev/null || true
+		nft delete table inet openflux 2>/dev/null || true
+		for section in openflux_zone openflux_forward openflux_direct; do uci -q delete "firewall.$section" || true; done
+		for section in openflux4 openflux6; do uci -q delete "dhcp.$section" || true; done
+		for key in flow_offloading flow_offloading_hw; do
+			if [ "$(uci -q get firewall.@defaults[0].$key || true)" = 0 ]; then
+				value=$(cat "$STATE/$key" 2>/dev/null || true)
+				case "$value" in 0|1) uci set "firewall.@defaults[0].$key=$value";; *) uci -q delete "firewall.@defaults[0].$key" || true;; esac
+			fi
+		done
+		uci commit firewall
+		uci commit dhcp
+		fw4 reload
+		/etc/init.d/dnsmasq restart
+		rm -f "$STATE/prepared"
+	fi
+}
+
+prepare() {
+	[ ! -e "$STATE/prepared" ] || cleanup
+	/usr/bin/openflux-client --check
+	# Never interpolate UCI strings into nft syntax without validation.
+	lan=$(uci -q get openflux.main.lan)
+	wan=$(uci -q get openflux.main.wan)
+	case "$lan:$wan" in *[!a-zA-Z0-9_:]*) echo 'Invalid network name' >&2; return 1;; esac
+	network_get_device lan_dev "$lan"
+	case "$lan_dev" in ''|*[!a-zA-Z0-9_.-]*) echo 'LAN device unavailable' >&2; return 1;; esac
+	# This release supports the conventional LAN/WAN firewall zones.
+	[ "$lan" = lan ] && [ "$wan" = wan ] || { echo 'Use LAN and WAN networks' >&2; return 1; }
+	dnsmasq --version | grep -q ' no-nftset' && { echo 'dnsmasq-full with nftset is required' >&2; return 1; }
+	# Refuse to stack VPNs: underlay and fail-open must use the physical WAN.
+	network_get_device wan_dev "$wan"
+	default_dev=$(ip -4 route get 1.1.1.1 | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -n 1)
+	[ "$default_dev" = "$wan_dev" ] || { echo 'Main route is not WAN; disable the old VPN first' >&2; return 1; }
+	for section in openflux_zone openflux_forward openflux_direct; do
+		! uci -q get "firewall.$section" >/dev/null || { echo 'Owned section conflict' >&2; return 1; }
+	done
+	for section in openflux4 openflux6; do ! uci -q get "dhcp.$section" >/dev/null || return 1; done
+	! ip rule show | grep -q '^10222:' || return 1
+	[ -z "$(ip route show table 20220 2>/dev/null)" ] || return 1
+	! nft list table inet openflux >/dev/null 2>&1 || return 1
+	/usr/bin/openflux-client --domains > "$STATE/domains"
+	printf '%s\n' "$lan_dev" > "$STATE/lan"
+	for key in flow_offloading flow_offloading_hw; do uci -q get "firewall.@defaults[0].$key" > "$STATE/$key" || true; done
+	touch "$STATE/prepared"
+	nft -f - <<EOF
+table inet openflux {
+ set active_lan { type ifname; flags timeout; timeout 20s; }
+ set direct4 { type ipv4_addr; }
+ set direct6 { type ipv6_addr; }
+ set local4 { type ipv4_addr; flags interval; elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/3 }; }
+ set local6 { type ipv6_addr; flags interval; elements = { ::/128, ::1/128, fc00::/7, fe80::/10, ff00::/8 }; }
+ chain mark_lan {
+  type filter hook prerouting priority -140; policy accept;
+  iifname @active_lan ip daddr @local4 return
+  iifname @active_lan fib daddr type local return
+  iifname @active_lan ip daddr @direct4 return
+  iifname @active_lan meta nfproto ipv4 meta mark set (meta mark & 0xffff0000) | 0x4f00
+ }
+ chain dns_lan {
+  type nat hook prerouting priority -105; policy accept;
+  iifname "$lan_dev" meta l4proto { tcp, udp } th dport 53 redirect to :53
+ }
+ chain ipv6_lan {
+  type filter hook forward priority 10; policy accept;
+  iifname @active_lan ip6 daddr @local6 return
+  iifname @active_lan ip6 daddr @direct6 return
+  iifname @active_lan meta nfproto ipv6 reject with icmpv6 type no-route
+ }
+}
+EOF
+	uci set firewall.openflux_zone=zone
+	uci set firewall.openflux_zone.name=openflux
+	uci add_list firewall.openflux_zone.device=oflux0
+	uci set firewall.openflux_zone.input=REJECT
+	uci set firewall.openflux_zone.output=ACCEPT
+	uci set firewall.openflux_zone.forward=REJECT
+	uci set firewall.openflux_zone.masq=1
+	uci set firewall.openflux_zone.mtu_fix=1
+	uci set firewall.openflux_forward=forwarding
+	uci set firewall.openflux_forward.src=lan
+	uci set firewall.openflux_forward.dest=openflux
+	uci set firewall.openflux_direct=forwarding
+	uci set firewall.openflux_direct.src=lan
+	uci set firewall.openflux_direct.dest=wan
+	uci set firewall.@defaults[0].flow_offloading=0
+	uci set firewall.@defaults[0].flow_offloading_hw=0
+	for family in 4 6; do
+		uci set "dhcp.openflux$family=ipset"
+		uci set "dhcp.openflux$family.table=openflux"
+		uci set "dhcp.openflux$family.table_family=inet"
+		uci set "dhcp.openflux$family.family=$family"
+		uci add_list "dhcp.openflux$family.name=direct$family"
+		while IFS= read -r d; do uci add_list "dhcp.openflux$family.domain=$d"; done < "$STATE/domains"
+	done
+	uci commit firewall
+	uci commit dhcp
+	fw4 reload
+	/etc/init.d/dnsmasq restart
+}
+
+case "${1:-}" in
+ status)
+  . /usr/share/libubox/jshn.sh
+  json_init
+  if [ -s /var/run/openflux/status.json ]; then
+   json_load "$(cat /var/run/openflux/status.json)" || json_init
+  fi
+  json_get_var modified updated || true
+  json_get_var mono uptime || true
+  case "$modified" in ''|*[!0-9]*) modified=0;; esac
+  now=$(cut -d. -f1 /proc/uptime)
+  case "$mono" in ''|*[!0-9]*) age=$(( $(date +%s) - modified ));; *) age=$((now - mono));; esac
+  json_add_int age "$age"
+  running=$(ubus call service list '{"name":"openflux"}' | jsonfilter -e '@.openflux.instances.*.running' | head -n1)
+  [ "$running" = true ] && running=1 || running=0
+  json_add_boolean running "$running"
+  route_dev=$(ip -4 route get 1.1.1.1 | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -n1)
+  wan=$(uci -q get openflux.main.wan || true)
+  network_get_device wan_dev "$wan" || wan_dev=''
+  json_add_string route_device "$route_dev"
+  json_add_string wan_device "$wan_dev"
+  json_add_string configured_workers "$(uci -q get openflux.main.workers || echo 8)"
+  json_add_string enabled "$(uci -q get openflux.main.enabled || echo 0)"
+  json_add_string last_error "$(head -c 1200 /var/run/openflux/start-error 2>/dev/null || true)"
+  json_dump
+  ;;
+ logs) tail -n 250 /var/run/openflux/client.log 2>/dev/null || printf '%s\n' 'Журнал появится после запуска обновлённого клиента.';;
+ check) check_wan;;
+ prepare) prepare;;
+ tunnel)
+  ip route replace default dev oflux0 table 20220
+  ip rule show | grep -q '^10222:' || ip rule add pref 10222 fwmark 0x4f00/0xffff lookup 20220
+  ;;
+ vpn)
+  lan_dev=$(cat "$STATE/lan")
+  case "$lan_dev" in ''|*[!a-zA-Z0-9_.-]*) exit 1;; esac
+  # Atomic refresh, expiry still releases traffic if the client is killed.
+  printf 'flush set inet openflux active_lan\nadd element inet openflux active_lan { "%s" timeout 20s }\n' "$lan_dev" | nft -f -
+  ;;
+ direct) direct;;
+ cleanup) cleanup;;
+ *) exit 2;;
+esac

@@ -1,0 +1,8 @@
+config openflux 'main'
+	option enabled '0'
+	option link ''
+	option lan 'lan'
+	option wan 'wan'
+	list direct_domain 'openfluxvpn.ru'
+	list direct_domain 'vk.com'
+	list direct_domain 'vk.ru'
