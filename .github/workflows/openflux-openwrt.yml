@@ -1,0 +1,79 @@
+name: OpenFlux OpenWrt
+on:
+  push:
+    branches: ['main', 'codex/openflux-openwrt-installer']
+    tags: ['openwrt-v*']
+    paths: ['openwrt/**', '.github/workflows/openflux-openwrt.yml']
+  pull_request:
+    paths: ['openwrt/**', '.github/workflows/openflux-openwrt.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: openwrt/go.mod
+          cache: false
+      - name: Tests and shell syntax
+        working-directory: openwrt
+        run: |
+          go test -mod=vendor ./client
+          go vet -mod=vendor ./client
+          for script in install.sh build-apk.sh package-post-install.sh package-pre-deinstall.sh files/etc/init.d/openflux files/usr/libexec/openflux-network; do sh -n "$script"; done
+          node --check files/www/luci-static/resources/view/openflux/main.js
+      - name: Cross compile router clients
+        working-directory: openwrt
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARM: '7'
+          GOMIPS: softfloat
+        run: |
+          mkdir -p dist
+          for arch in arm64 amd64 arm mipsle; do
+            GOARCH="$arch" go build -mod=vendor -trimpath -ldflags='-s -w' -o "dist/openflux-client-$arch" ./client
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: openwrt-clients
+          path: openwrt/dist/
+          retention-days: 7
+  release:
+    if: startsWith(github.ref, 'refs/tags/openwrt-v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: openwrt-clients
+          path: openwrt/dist
+      - name: Verify release version
+        working-directory: openwrt
+        run: |
+          version=$(sed -n 's/^VERSION=//p' install.sh)
+          test "$GITHUB_REF_NAME" = "openwrt-v$version"
+          grep -q "version:$version'" build-apk.sh
+      - name: Sign APK packages
+        env:
+          OPENWRT_SIGNING_KEY: ${{ secrets.OPENWRT_SIGNING_KEY }}
+        run: |
+          test -n "$OPENWRT_SIGNING_KEY"
+          umask 077
+          mkdir -p openwrt/keys
+          printf '%s\n' "$OPENWRT_SIGNING_KEY" > openwrt/keys/openflux-router.pem
+          trap 'rm -f openwrt/keys/openflux-router.pem' EXIT
+          docker run --rm -v "$PWD/openwrt:/build" alpine@sha256:020dfcbaaf4cc1078bf2d9c7ba31a8466e334061dcd2f248001d68f79e52c000 sh -ec 'apk add --no-cache openssl; sh /build/build-apk.sh'
+          test "$(find openwrt/output -name '*.apk' | wc -l)" -eq 5
+      - name: Publish router release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" openwrt/output/* --verify-tag --latest=false --title "OpenFlux OpenWrt ${GITHUB_REF_NAME#openwrt-v}" --notes-file openwrt/README.md

@@ -1,0 +1,4 @@
+
+/openwrt/** text eol=lf
+/openwrt/vendor/** -whitespace
+/.github/workflows/openflux-openwrt.yml text eol=lf

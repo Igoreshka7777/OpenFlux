@@ -1,0 +1,6 @@
+dist/
+output/
+keys/
+public/
+stage-*/
+*.test
