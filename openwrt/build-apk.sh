@@ -25,7 +25,7 @@ for pair in aarch64_cortex-a53:arm64 aarch64_generic:arm64 x86_64:amd64 arm_cort
  printf '/etc/config/openflux\n' > "$root/lib/apk/packages/openflux-router.conffiles"
  (cd "$root" && sha256sum etc/config/openflux | sed 's|  etc/|  /etc/|') > "$root/lib/apk/packages/openflux-router.conffiles_static"
  apk mkpkg --compat 3.0.0 --sign-key keys/openflux-router.pem \
-  --info 'name:openflux-router' --info 'version:0.1.2-r1' \
+  --info 'name:openflux-router' --info 'version:0.1.2-r2' \
   --info "arch:$arch" --info 'license:GPL-3.0-only AND MIT' --info 'origin:openflux-router' \
   --info 'description:OpenFlux VPN client and LuCI control for OpenWrt' \
   --info 'url:https://openfluxvpn.ru/' --info 'maintainer:OpenFlux' \
@@ -33,8 +33,8 @@ for pair in aarch64_cortex-a53:arm64 aarch64_generic:arm64 x86_64:amd64 arm_cort
   --script post-install:package-post-install.sh \
   --script post-upgrade:package-post-install.sh \
   --script pre-deinstall:package-pre-deinstall.sh \
-  --files "$root" --output "output/openflux-router-0.1.2-r1-$arch.apk"
- apk --keys-dir /build/public verify "output/openflux-router-0.1.2-r1-$arch.apk"
+  --files "$root" --output "output/openflux-router-0.1.2-r2-$arch.apk"
+ apk --keys-dir /build/public verify "output/openflux-router-0.1.2-r2-$arch.apk"
 done
 cp public/openflux-router.pem output/
 cp install.sh output/
