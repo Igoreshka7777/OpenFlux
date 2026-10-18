@@ -1,5 +1,25 @@
 import Foundation
 
+struct IOSUpdateConnectionIntent: Codable {
+    let build: Int
+    let serverID: UUID
+    let created: TimeInterval
+    private static let key = "openflux-update-connection-intent-v1"
+
+    static func remember(build: Int, serverID: UUID, defaults: UserDefaults = .standard, now: TimeInterval = Date().timeIntervalSince1970) {
+        let value = Self(build: build, serverID: serverID, created: now)
+        if let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: key) }
+    }
+    static func clear(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
+
+    static func takeAfterUpdate(build: Int, serverID: UUID, defaults: UserDefaults = .standard, now: TimeInterval = Date().timeIntervalSince1970) -> Bool {
+        guard let data = defaults.data(forKey: key), let intent = try? JSONDecoder().decode(Self.self, from: data) else { return false }
+        guard build != intent.build else { return false }
+        clear(defaults: defaults) // One attempt, never a reconnect loop.
+        return build > intent.build && intent.build > 0 && intent.serverID == serverID && now >= intent.created && now - intent.created <= 86400
+    }
+}
+
 struct IOSUpdatePolicy: Codable, Equatable {
     let schema: Int
     let applicationID: String

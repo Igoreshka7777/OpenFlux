@@ -33,3 +33,19 @@ for target in [manifest.replacingOccurrences(of: "https:", with: "http:"), manif
 }
 check(IOSUpdateAPI.validatedInstallURL(installLink(manifest) + "&action=download-manifest") == nil, "Reject duplicate installation parameters")
 print("Direct installation URL checks passed")
+let recoverySuite = "OpenFlux.update-recovery-test." + UUID().uuidString
+let recoveryDefaults = UserDefaults(suiteName: recoverySuite)!
+let recoveryServer = UUID()
+IOSUpdateConnectionIntent.remember(build: 470, serverID: recoveryServer, defaults: recoveryDefaults, now: 100)
+check(!IOSUpdateConnectionIntent.takeAfterUpdate(build: 470, serverID: recoveryServer, defaults: recoveryDefaults, now: 101), "Returning from installer without update does not reconnect")
+check(IOSUpdateConnectionIntent.takeAfterUpdate(build: 471, serverID: recoveryServer, defaults: recoveryDefaults, now: 110), "Recover same server after actual app update")
+check(!IOSUpdateConnectionIntent.takeAfterUpdate(build: 471, serverID: recoveryServer, defaults: recoveryDefaults, now: 111), "Recovery is one shot")
+IOSUpdateConnectionIntent.remember(build: 470, serverID: recoveryServer, defaults: recoveryDefaults, now: 100)
+IOSUpdateConnectionIntent.clear(defaults: recoveryDefaults)
+check(!IOSUpdateConnectionIntent.takeAfterUpdate(build: 471, serverID: recoveryServer, defaults: recoveryDefaults, now: 110), "Manual disconnect cancels recovery")
+for scenario in [(469, recoveryServer, 110.0), (471, UUID(), 110.0), (471, recoveryServer, 86501.0), (471, recoveryServer, 99.0)] {
+    IOSUpdateConnectionIntent.remember(build: 470, serverID: recoveryServer, defaults: recoveryDefaults, now: 100)
+    check(!IOSUpdateConnectionIntent.takeAfterUpdate(build: scenario.0, serverID: scenario.1, defaults: recoveryDefaults, now: scenario.2), "Reject downgrade, changed server and stale recovery")
+}
+recoveryDefaults.removePersistentDomain(forName: recoverySuite)
+print("Post-update VPN recovery checks passed")

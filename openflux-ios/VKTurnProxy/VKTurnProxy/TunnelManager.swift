@@ -389,6 +389,29 @@ class TunnelManager: ObservableObject {
 
     private var attemptSubscriptionPassword = ""
 
+    func rememberConnectionForUpdate() {
+        let server = ServerStore.shared.activeServer
+        guard manager?.connection.status == .connected, !directMode,
+              sessionServer?.id == server.id else {
+            IOSUpdateConnectionIntent.clear()
+            return
+        }
+        IOSUpdateConnectionIntent.remember(build: IOSUpdateAPI.build, serverID: server.id)
+    }
+
+    func resumeConnectionAfterUpdateIfNeeded() async {
+        await ensureManagerLoaded()
+        guard !Task.isCancelled, UIApplication.shared.applicationState == .active,
+              let manager else { return }
+        let server = ServerStore.shared.activeServer
+        guard IOSUpdateConnectionIntent.takeAfterUpdate(build: IOSUpdateAPI.build, serverID: server.id) else { return }
+        guard manager.connection.status == .disconnected, !preBootstrapInProgress,
+              let proto = manager.protocolConfiguration as? NETunnelProviderProtocol,
+              proto.providerConfiguration?["server_id"] as? String == server.id.uuidString else { return }
+        SharedLogger.shared.log("[OpenFlux] Restoring the previously connected VPN after app update")
+        await connect(config: TunnelConfig.make(for: server))
+    }
+
     func connect(config: TunnelConfig) async {
         // Single-flight: if a connect() is already running (probe loop in
         // progress), drop the new request. Without this, repeatedly tapping
@@ -1214,6 +1237,7 @@ class TunnelManager: ObservableObject {
     }
 
     func stopExpiredSubscription(password: String) {
+        IOSUpdateConnectionIntent.clear()
         if preBootstrapInProgress && attemptSubscriptionPassword == password {
             connectAttempt?.cancel()
         }
@@ -1228,6 +1252,7 @@ class TunnelManager: ObservableObject {
     }
 
     func disconnect() {
+        IOSUpdateConnectionIntent.clear()
         // An attempt still in pre-bootstrap has not reached iOS: cancel the
         // task (its body publishes the notice as it unwinds) — AND still record
         // the intent and issue the stop below, for the window where

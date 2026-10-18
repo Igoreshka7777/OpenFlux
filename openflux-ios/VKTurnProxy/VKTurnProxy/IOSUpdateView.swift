@@ -37,10 +37,12 @@ struct IOSUpdateView: View {
                                 defer { openingInstall = false }
                                 let page = IOSUpdateAPI.installationURL(Bundle.main.object(forInfoDictionaryKey: "OpenFluxUpdateURL") as? String)
                                 if let install = await IOSUpdateAPI.readyInstallationURL(page) {
+                                    TunnelManager.shared.rememberConnectionForUpdate()
                                     if !(await UIApplication.shared.open(install, options: [:])) {
                                         await UIApplication.shared.open(page, options: [:])
                                     }
                                 } else {
+                                    TunnelManager.shared.rememberConnectionForUpdate()
                                     await UIApplication.shared.open(page, options: [:])
                                 }
                             }
@@ -49,6 +51,7 @@ struct IOSUpdateView: View {
                                 .background(OpenFluxStyle.orange, in: RoundedRectangle(cornerRadius: 14))
                         }.disabled(openingInstall)
                         Text("Готовое обновление устанавливается сразу после вашего подтверждения. Если файл ещё подписывается, откроется страница подготовки. Приложение удалять не нужно.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
+                        Text("Во время подготовки OpenFlux сохраняет VPN-соединение. При установке iOS может его прервать. После обновления откройте OpenFlux — приложение попробует восстановить ранее включённый VPN.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
                     }
                 }
                 Button(checking ? "Проверяем…" : "Проверить обновление") {

@@ -53,6 +53,10 @@ struct SubscriptionPresentationHost: View {
 
     var body: some View {
         Color.clear
+            .task(id: scenePhase == .active) {
+                guard scenePhase == .active else { return }
+                await TunnelManager.shared.resumeConnectionAfterUpdateIfNeeded()
+            }
             .onChange(of: password) { _ in dismissedPresentation = nil }
             .onChange(of: scenePhase) { phase in if phase == .active { dismissedPresentation = nil } }
             .task(id: password + (scenePhase == .active ? ":active" : ":inactive")) {

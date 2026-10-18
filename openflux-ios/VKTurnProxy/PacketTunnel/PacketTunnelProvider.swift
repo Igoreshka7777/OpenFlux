@@ -363,13 +363,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         Task { [weak self] in
             guard let self = self else { return }
             defer { self.finishSubscriptionCheck() }
-            let policy = await IOSUpdateAPI.fetch()
-            guard !self.stopRequested else { return }
-            if policy?.required(for: IOSUpdateAPI.build) == true {
-                self.stopClientNotices()
-                self.cancelTunnelWithError(Self.csqttStopError("Обновите OpenFlux, чтобы продолжить подключение."))
-                return
-            }
             guard let access = await SubscriptionAPI.fetch(password: password), !self.stopRequested else { return }
             if access.expired, let expiry = access.expiresAt {
                 await SubscriptionNotices.show(password: password, expiry: expiry)
@@ -434,18 +427,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         backendLock.lock()
         _stopRequested = false
         backendLock.unlock()
-        Task {
-            let policy = await IOSUpdateAPI.fetch()
-            guard !self.stopRequested else {
-                completionHandler(NSError(domain: "OpenFlux", code: 2, userInfo: [NSLocalizedDescriptionKey: "Подключение отменено."]))
-                return
-            }
-            guard policy?.required(for: IOSUpdateAPI.build) != true else {
-                completionHandler(NSError(domain: "OpenFlux", code: 1, userInfo: [NSLocalizedDescriptionKey: "Обновите OpenFlux, чтобы подключиться."]))
-                return
-            }
-            self.startAllowedTunnel(options: options, completionHandler: completionHandler)
-        }
+        // App updates are presented in the main app and must not stop or block VPN traffic.
+        self.startAllowedTunnel(options: options, completionHandler: completionHandler)
     }
 
     private func startAllowedTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
