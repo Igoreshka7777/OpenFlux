@@ -50,6 +50,12 @@ struct IOSUpdateView: View {
                             Text(openingInstall ? "Проверяем готовность…" : "Установить обновление →").font(.headline).frame(maxWidth: .infinity).padding(18)
                                 .background(OpenFluxStyle.orange, in: RoundedRectangle(cornerRadius: 14))
                         }.disabled(openingInstall)
+                        if !monitor.required {
+                            Button("Позже") { monitor.deferOptional() }
+                                .font(.headline).frame(maxWidth: .infinity).padding(16)
+                                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                                .foregroundColor(.white).disabled(openingInstall)
+                        }
                         Text("Готовое обновление устанавливается сразу после вашего подтверждения. Если файл ещё подписывается, откроется страница подготовки. Приложение удалять не нужно.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
                         Text("Во время подготовки OpenFlux сохраняет VPN-соединение. При установке iOS может его прервать. После обновления откройте OpenFlux — приложение попробует восстановить ранее включённый VPN.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
                     }
@@ -58,10 +64,6 @@ struct IOSUpdateView: View {
                     checking = true
                     Task { await monitor.refresh(); checking = false }
                 }.disabled(checking).foregroundColor(OpenFluxStyle.orange)
-                if !monitor.required {
-                    Button("Позже") { monitor.deferOptional() }
-                        .disabled(openingInstall).foregroundColor(OpenFluxStyle.muted)
-                }
                 Link("Связаться с администратором ↗", destination: URL(string: "https://t.me/Igorekk777")!).foregroundColor(OpenFluxStyle.muted)
             }.padding(24)
         }.foregroundColor(.white).background(OpenFluxStyle.background.ignoresSafeArea()).interactiveDismissDisabled(monitor.required || openingInstall)
