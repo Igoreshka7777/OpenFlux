@@ -213,6 +213,11 @@ type Credential struct {
 	Allocated func()
 }
 
+// ErrHandshakeTimeout means the allocated TURN path did not return a VPN
+// configuration. This can be an unreachable peer or an invalid VPN key; it
+// does not mean the TURN credentials were rejected.
+var ErrHandshakeTimeout = errors.New("no TUNCONF: VPN peer did not answer on this relay path")
+
 // dialRelay is DialRelay, replaceable by tests with a loopback relay.
 var dialRelay = DialRelay
 
@@ -1454,7 +1459,10 @@ attempts:
 		}
 	}
 	if !got {
-		return errors.New("no TUNCONF (wrong password is silence)")
+		if cred.Failed != nil {
+			cred.Failed(ErrHandshakeTimeout)
+		}
+		return ErrHandshakeTimeout
 	}
 	w.c.setConfig(conf)
 	if err := w.send([]byte(ReadyRequest)); err != nil {

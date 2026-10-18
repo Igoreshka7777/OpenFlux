@@ -16,7 +16,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  relay-failover-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: openflux-ios/go.mod
+          cache-dependency-path: openflux-ios/go.sum
+      - name: Check VPN relay fallback and credential leases
+        working-directory: openflux-ios
+        run: go test -race ./pkg/csqtt ./pkg/proxy -run 'Test(SilentHandshake|UnreachableRelay|PrimaryOnlySeed|CredentialLease|RefusedAllocation)' -count=1
   ios:
+    needs: relay-failover-tests
     runs-on: macos-15
     timeout-minutes: 60
     defaults:
@@ -89,7 +102,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-464-unsigned
+          name: OpenFlux-iOS-465-unsigned
           path: |
             openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
             openflux-ios/build_output/SHA256SUMS.txt
@@ -99,7 +112,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-464-build-log
+          name: OpenFlux-iOS-465-build-log
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7

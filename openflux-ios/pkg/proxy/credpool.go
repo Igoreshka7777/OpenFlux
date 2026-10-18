@@ -37,6 +37,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -64,13 +65,15 @@ type CredPoolConfig struct {
 
 // CredPool wraps the package's credPool for use outside Proxy.
 type CredPool struct {
-	cp       *credPool
-	numConns int
-	linkID   string
-	relayIP  atomic.Value    // string: first host of the last fresh mint
-	pace     growPace        // set before Grow starts; tests shrink it
-	ctx      context.Context // the pool's own lifetime: the saver, Grow; ended by Close
-	cancel   context.CancelFunc
+	pathMu      sync.Mutex
+	failedPaths map[string]time.Time
+	cp          *credPool
+	numConns    int
+	linkID      string
+	relayIP     atomic.Value    // string: first host of the last fresh mint
+	pace        growPace        // set before Grow starts; tests shrink it
+	ctx         context.Context // the pool's own lifetime: the saver, Grow; ended by Close
+	cancel      context.CancelFunc
 }
 
 // CredPoolStats is the pool's state in the shape the app's Stats carries it
@@ -107,6 +110,18 @@ func NewCredPool(ctx context.Context, cfg CredPoolConfig) *CredPool {
 		if n := len(cookieLinks()); n > 0 {
 			size = 2 * n
 		}
+	}
+	baseFetch := fetch
+	fetch = func(block bool, slot int) (string, *TURNCreds, error) {
+		addr, creds, err := baseFetch(block, slot)
+		if err == nil {
+			if next := p.alternativePath(addr, creds); next != "" {
+				copy := *creds
+				copy.Address = next
+				addr, creds = next, &copy
+			}
+		}
+		return addr, creds, err
 	}
 	p.cp = newCredPool(ctx, size, cfg.Cooldown, cfg.CachePath, fetch)
 	p.cp.setColdStartTarget(cfg.NumConns)
@@ -221,7 +236,19 @@ func (p *CredPool) Acquire(connIdx int) (addr string, creds *TURNCreds, slot int
 	if p.ctx.Err() != nil {
 		return "", nil, -1, errors.New("credpool: closed")
 	}
-	return p.cp.get(connIdx, false)
+	addr, creds, slot, err = p.cp.get(connIdx, false)
+	if err == nil {
+		// Cached slots can still name the path another worker just found dead.
+		if next := p.alternativePath(addr, creds); next != "" {
+			p.replacePath(slot, creds, addr, next)
+			p.cp.release(slot, creds)
+			addr, creds, slot, err = p.cp.get(connIdx, false)
+		}
+		if host, _, e := net.SplitHostPort(addr); e == nil {
+			p.relayIP.Store(host)
+		}
+	}
+	return
 }
 
 // Release returns a connection's hold on its slot (call when the allocation

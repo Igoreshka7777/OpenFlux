@@ -343,7 +343,14 @@ func (a *csqttPoolAdapter) creds(ctx context.Context, workerID int) (csqtt.Crede
 						a.pool.Release(slot, creds)
 					})
 				},
-				Failed:    func(err error) { a.refused(workerID, slot, creds, err) },
+				Failed: func(err error) {
+					if errors.Is(err, csqtt.ErrHandshakeTimeout) {
+						a.pool.ReportUnreachable(slot, creds, addr)
+						log.Printf("csqtt: worker %d: relay path did not reach VPN peer; trying another provider endpoint", workerID)
+						return
+					}
+					a.refused(workerID, slot, creds, err)
+				},
 				Allocated: func() { allocated.Store(true); a.pool.NoteAllocated(slot, creds) },
 			}, nil
 		}
