@@ -430,10 +430,7 @@ struct OpenFluxAccessPortal: UIViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.isOpaque = false
         view.backgroundColor = UIColor(red: 0.035, green: 0.035, blue: 0.04, alpha: 1)
-        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout")!)
-        if let password = password, !password.isEmpty {
-            request = IOSCheckoutRequest.make(password: password)
-        }
+        let request = IOSCheckoutRequest.initial(password: password)
         view.load(request)
         return view
     }
