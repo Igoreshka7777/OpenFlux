@@ -21,3 +21,15 @@ check(request.httpMethod == "POST", "Private credential uses body")
 check(request.url?.query == nil, "No credential in URL")
 check(String(data: request.httpBody!, encoding: .utf8) == "password=abc%2B%26%3D%23%20test", "Form encoding")
 print("iOS update and payment checks passed")
+let manifest = "https://openfluxvpn.ru/ios/install/" + String(repeating: "b", count: 43) + "/manifest.plist"
+func installLink(_ target: String) -> String {
+    var url = URLComponents(string: "itms-services://")!
+    url.queryItems = [URLQueryItem(name: "action", value: "download-manifest"), URLQueryItem(name: "url", value: target)]
+    return url.string!
+}
+check(IOSUpdateAPI.validatedInstallURL(installLink(manifest)) != nil, "Ready signed installation")
+for target in [manifest.replacingOccurrences(of: "https:", with: "http:"), manifest.replacingOccurrences(of: "openfluxvpn.ru", with: "evil.example"), manifest + "?redirect=1", manifest.replacingOccurrences(of: "/manifest.plist", with: "/OpenFlux.ipa")] {
+    check(IOSUpdateAPI.validatedInstallURL(installLink(target)) == nil, "Reject unsafe signed installation")
+}
+check(IOSUpdateAPI.validatedInstallURL(installLink(manifest) + "&action=download-manifest") == nil, "Reject duplicate installation parameters")
+print("Direct installation URL checks passed")

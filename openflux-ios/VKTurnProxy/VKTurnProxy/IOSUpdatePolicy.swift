@@ -37,6 +37,11 @@ private final class IOSUpdateRedirectPolicy: NSObject, URLSessionTaskDelegate {
 }
 
 enum IOSUpdateAPI {
+    private struct DeliveryStatus: Decodable {
+        let ready: Bool
+        let version: String
+        let install_url: String?
+    }
     static var build: Int { Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0 }
     private static var defaults: UserDefaults { UserDefaults(suiteName: "group.org.igoreshka7777.openflux") ?? .standard }
     private static let key = "openflux-ios-update-policy-v1"
@@ -50,6 +55,34 @@ enum IOSUpdateAPI {
            url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
            url.path.range(of: "^/ios/update/[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil { return url }
         return URL(string: "https://openfluxvpn.ru/ios")!
+    }
+    static func validatedInstallURL(_ raw: String?) -> URL? {
+        guard let raw, let parts = URLComponents(string: raw), parts.scheme == "itms-services",
+              (parts.host ?? "").isEmpty, parts.path.isEmpty, parts.fragment == nil,
+              parts.user == nil, parts.password == nil, parts.port == nil,
+              let items = parts.queryItems, items.count == 2,
+              items.filter({ $0.name == "action" && $0.value == "download-manifest" }).count == 1,
+              let manifest = items.first(where: { $0.name == "url" })?.value,
+              let url = URL(string: manifest), url.scheme == "https", url.host == "openfluxvpn.ru",
+              url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
+              url.path.range(of: "^/ios/install/[A-Za-z0-9_-]{43}/manifest\\.plist$", options: .regularExpression) != nil
+        else { return nil }
+        return parts.url
+    }
+    static func readyInstallationURL(_ personalURL: URL) async -> URL? {
+        guard installationURL(personalURL.absoluteString) == personalURL,
+              personalURL.path.hasPrefix("/ios/update/") else { return nil }
+        var request = URLRequest(url: personalURL.appendingPathComponent("status"))
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard !Task.isCancelled, (response as? HTTPURLResponse)?.statusCode == 200, data.count < 16384,
+                  let status = try? JSONDecoder().decode(DeliveryStatus.self, from: data), status.ready,
+                  let version = Int(status.version), version > build, version < 10000000,
+                  version >= (cached?.latestBuild ?? 0) else { return nil }
+            return validatedInstallURL(status.install_url)
+        } catch { return nil }
     }
     static func fetch(force: Bool = false) async -> IOSUpdatePolicy? {
         if !force && Date().timeIntervalSince1970 - defaults.double(forKey: key + "-checked") < 60 { return cached }

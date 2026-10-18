@@ -16,6 +16,7 @@ final class IOSUpdateMonitor: ObservableObject {
 struct IOSUpdateView: View {
     @ObservedObject private var monitor = IOSUpdateMonitor.shared
     @State private var checking = false
+    @State private var openingInstall = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -29,13 +30,23 @@ struct IOSUpdateView: View {
                         Text(monitor.policy?.message ?? "Доступно обновление OpenFlux.").foregroundColor(OpenFluxStyle.muted)
                         Text("Сервер подготовит новую версию с вашим сохранённым сертификатом. Повторная регистрация и покупка сертификата не нужны.").font(.subheadline).foregroundColor(OpenFluxStyle.muted)
                         Button {
-                            let url = IOSUpdateAPI.installationURL(Bundle.main.object(forInfoDictionaryKey: "OpenFluxUpdateURL") as? String)
-                            UIApplication.shared.open(url)
+                            openingInstall = true
+                            Task { @MainActor in
+                                defer { openingInstall = false }
+                                let page = IOSUpdateAPI.installationURL(Bundle.main.object(forInfoDictionaryKey: "OpenFluxUpdateURL") as? String)
+                                if let install = await IOSUpdateAPI.readyInstallationURL(page) {
+                                    if !(await UIApplication.shared.open(install, options: [:])) {
+                                        await UIApplication.shared.open(page, options: [:])
+                                    }
+                                } else {
+                                    await UIApplication.shared.open(page, options: [:])
+                                }
+                            }
                         } label: {
-                            Text("Установить обновление →").font(.headline).frame(maxWidth: .infinity).padding(18)
+                            Text(openingInstall ? "Проверяем готовность…" : "Установить обновление →").font(.headline).frame(maxWidth: .infinity).padding(18)
                                 .background(OpenFluxStyle.orange, in: RoundedRectangle(cornerRadius: 14))
-                        }
-                        Text("Подготовка обычно занимает около 5 минут. Подтвердите установку на iPhone. Приложение удалять не нужно.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
+                        }.disabled(openingInstall)
+                        Text("Готовое обновление устанавливается сразу после вашего подтверждения. Если файл ещё подписывается, откроется страница подготовки. Приложение удалять не нужно.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
                     }
                 }
                 Button(checking ? "Проверяем…" : "Проверить обновление") {
