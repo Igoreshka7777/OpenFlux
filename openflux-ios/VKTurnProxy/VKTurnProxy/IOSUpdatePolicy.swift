@@ -39,20 +39,6 @@ struct IOSUpdatePolicy: Codable, Equatable {
 }
 
 enum IOSCheckoutRequest {
-    static func initial(password: String?, invitation: String? = IOSDeviceInvitation.current) -> URLRequest {
-        if let password, !password.isEmpty { return make(password: password) }
-        if let invitation, IOSDeviceInvitation.valid(invitation) {
-            var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout/invitation")!)
-            request.httpMethod = "POST"
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 20
-            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.httpBody = Data(("invitation=" + invitation).utf8)
-            return request
-        }
-        return URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout")!)
-    }
-
     static func make(password: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout/app")!)
         request.httpMethod = "POST"
@@ -62,24 +48,6 @@ enum IOSCheckoutRequest {
         let safe = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
         request.httpBody = Data(("password=" + (password.addingPercentEncoding(withAllowedCharacters: safe) ?? "")).utf8)
         return request
-    }
-}
-
-enum IOSDeviceInvitation {
-    static func valid(_ value: String) -> Bool {
-        value.range(of: "^[a-f0-9]{32}\\.[a-f0-9]{64}$", options: .regularExpression) != nil
-    }
-    static var current: String? {
-        let key = "openflux-device-invitation-v1"
-        if let url = Bundle.main.url(forResource: "OpenFluxInvitation", withExtension: "plist"),
-           let data = try? Data(contentsOf: url),
-           let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
-           let token = values["invitation"], valid(token) {
-            UserDefaults.standard.set(token, forKey: key)
-            return token
-        }
-        guard let saved = UserDefaults.standard.string(forKey: key), valid(saved) else { return nil }
-        return saved
     }
 }
 

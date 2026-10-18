@@ -49,14 +49,3 @@ for scenario in [(469, recoveryServer, 110.0), (471, UUID(), 110.0), (471, recov
 }
 recoveryDefaults.removePersistentDomain(forName: recoverySuite)
 print("Post-update VPN recovery checks passed")
-let invitation = String(repeating: "a", count: 32) + "." + String(repeating: "b", count: 64)
-check(IOSDeviceInvitation.valid(invitation), "Device invitation format")
-for invalid in ["", invitation + "&referrer=other", "https://evil.example", String(repeating: "a", count: 2048)] {
-    check(!IOSDeviceInvitation.valid(invalid), "Invalid invitation rejected")
-}
-let firstPayment = IOSCheckoutRequest.initial(password: nil, invitation: invitation)
-check(firstPayment.url?.path == "/checkout/invitation" && firstPayment.httpMethod == "POST", "First payment carries embedded invitation without Safari cookies")
-check(firstPayment.url?.query == nil && String(data: firstPayment.httpBody!, encoding: .utf8) == "invitation=" + invitation, "Invitation is private request body")
-check(IOSCheckoutRequest.initial(password: "existing", invitation: invitation).url?.path == "/checkout/app", "Existing account keeps renewal ownership")
-check(IOSCheckoutRequest.initial(password: nil, invitation: nil).url?.path == "/checkout", "Ordinary installation remains supported")
-print("Embedded referral checkout checks passed")
