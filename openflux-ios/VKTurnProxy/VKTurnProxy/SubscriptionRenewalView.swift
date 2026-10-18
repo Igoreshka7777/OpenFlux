@@ -45,7 +45,10 @@ struct SubscriptionPresentationHost: View {
     private var entry: SubscriptionMonitor.Entry? { monitor.entries[password] }
     private var presented: Binding<Bool> {
         Binding(get: { updates.showUpdate || (entry?.status.expired == true && entry?.presentation != dismissedPresentation) },
-                set: { if !$0 { dismissedPresentation = entry?.presentation } })
+                set: { if !$0 {
+                    if updates.showUpdate { updates.deferOptional() }
+                    dismissedPresentation = entry?.presentation
+                } })
     }
 
     var body: some View {

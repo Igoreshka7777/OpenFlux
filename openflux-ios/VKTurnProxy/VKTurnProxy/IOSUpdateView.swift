@@ -5,12 +5,14 @@ import UIKit
 final class IOSUpdateMonitor: ObservableObject {
     static let shared = IOSUpdateMonitor()
     @Published private(set) var policy = IOSUpdateAPI.cached
+    @Published private(set) var deferredBuild = 0
     var required: Bool { policy?.required(for: IOSUpdateAPI.build) == true }
-    var showUpdate: Bool { policy?.available(for: IOSUpdateAPI.build) == true }
+    var showUpdate: Bool { required || (policy?.available(for: IOSUpdateAPI.build) == true && policy?.latestBuild != deferredBuild) }
     func refresh() async {
         policy = await IOSUpdateAPI.fetch(force: true)
         // Keep the VPN available while the user downloads the update.
     }
+    func deferOptional() { if !required { deferredBuild = policy?.latestBuild ?? 0 } }
 }
 
 struct IOSUpdateView: View {
@@ -53,8 +55,12 @@ struct IOSUpdateView: View {
                     checking = true
                     Task { await monitor.refresh(); checking = false }
                 }.disabled(checking).foregroundColor(OpenFluxStyle.orange)
+                if !monitor.required {
+                    Button("Позже") { monitor.deferOptional() }
+                        .disabled(openingInstall).foregroundColor(OpenFluxStyle.muted)
+                }
                 Link("Связаться с администратором ↗", destination: URL(string: "https://t.me/Igorekk777")!).foregroundColor(OpenFluxStyle.muted)
             }.padding(24)
-        }.foregroundColor(.white).background(OpenFluxStyle.background.ignoresSafeArea()).interactiveDismissDisabled(true)
+        }.foregroundColor(.white).background(OpenFluxStyle.background.ignoresSafeArea()).interactiveDismissDisabled(monitor.required || openingInstall)
     }
 }
