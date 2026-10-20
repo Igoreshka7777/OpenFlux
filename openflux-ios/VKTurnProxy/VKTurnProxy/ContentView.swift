@@ -906,7 +906,7 @@ struct SettingsView: View {
     @State private var connectionLinkInput = ""
     @State private var connectionLinkStatus = ""
     @State private var resolvingConnection = false
-    @State private var workerDraft = 30.0
+    @State private var workerDraft = Double(ServerProfile.recommendedCsqttConnections)
     @State private var showFullScreenSupport = false
 
     // 1-Click Connection Link import, PASTE PATH ONLY. Same flow as Full
@@ -973,6 +973,17 @@ struct SettingsView: View {
     private var workerLimit: Double {
         Double(max(9, max(store.activeServer.numConnections,
                           vkAuthEnabled ? cookieConnCap : TunnelConfig.anonConnCap)))
+    }
+    private var canEditTransport: Bool {
+        tunnel.status == .disconnected || tunnel.status == .invalid
+    }
+    private var udpTransport: Binding<Bool> {
+        Binding(get: { store.activeServer.useUDP }, set: { value in
+            guard canEditTransport else { return }
+            var server = store.activeServer
+            server.useUDP = value
+            store.update(server)
+        })
     }
     private var currentConnectionLink: String {
         if let saved = UserDefaults.standard.string(forKey: "openFluxConnectionLink"), !saved.isEmpty {
@@ -1074,6 +1085,39 @@ struct SettingsView: View {
                             .disabled(resolvingConnection || connectionLinkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                         .font(.system(size: 14, weight: .semibold))
+                    }
+                }
+
+                if store.activeServer.useCsqtt {
+                    OpenFluxCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Транспорт VK TURN")
+                                .font(.system(size: 18, weight: .bold))
+                            Picker("Транспорт VK TURN", selection: udpTransport) {
+                                Text("UDP").tag(true)
+                                Text("TCP").tag(false)
+                            }
+                            .pickerStyle(.segmented)
+                            .disabled(!canEditTransport)
+                            Text("При проблемах с UDP попробуйте TCP. Изменения применятся при следующем подключении.")
+                                .font(.caption)
+                                .foregroundColor(OpenFluxStyle.muted)
+                            Button("27 потоков · UDP") {
+                                guard canEditTransport else { return }
+                                var server = store.activeServer
+                                server.applyRecommendedCsqttTransport()
+                                store.update(server)
+                                workerDraft = Double(server.numConnections)
+                            }
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(OpenFluxStyle.orange)
+                            .disabled(!canEditTransport)
+                            if !canEditTransport {
+                                Text("Для изменения настроек отключите VPN")
+                                    .font(.caption)
+                                    .foregroundColor(OpenFluxStyle.muted)
+                            }
+                        }
                     }
                 }
 
@@ -1276,6 +1320,9 @@ struct SettingsView: View {
         .onAppear {
             refreshVKCookieInfo()
             connectionLinkInput = currentConnectionLink
+            workerDraft = Double(max(9, store.activeServer.numConnections))
+        }
+        .onChange(of: store.activeServerId) { _ in
             workerDraft = Double(max(9, store.activeServer.numConnections))
         }
         .onChange(of: vkAuthEnabled) { enabled in

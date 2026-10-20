@@ -12,6 +12,14 @@
 import Foundation
 
 struct ServerProfile: Codable, Identifiable, Equatable {
+    static let recommendedCsqttConnections = 27
+
+    mutating func applyRecommendedCsqttTransport() {
+        guard useCsqtt else { return }
+        useUDP = true
+        numConnections = Self.recommendedCsqttConnections
+    }
+
     var id: UUID = UUID()
     var serverName: String = "Server1"
 
@@ -171,6 +179,12 @@ extension ServerProfile {
     /// An empty `serverName` tells ServerStore to assign the next free "ServerN".
     init(link s: ConnectionSettings) {
         self.init()
+        // New CSQTT imports use the tested OpenFlux preset. Explicit link
+        // preferences and already-saved profiles retain their own values.
+        if s.useCsqtt == true {
+            useUDP = true
+            numConnections = Self.recommendedCsqttConnections
+        }
         serverName = s.serverName?.trimmingCharacters(in: .whitespaces) ?? ""
         if let v = s.privateKey { privateKey = v }
         if let v = s.peerPublicKey { peerPublicKey = v }
