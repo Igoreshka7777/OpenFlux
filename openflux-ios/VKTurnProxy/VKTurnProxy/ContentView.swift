@@ -111,8 +111,6 @@ struct ContentView: View {
                     // Keep active-server observation below the NavigationView host.
                     ActiveServerControls(tunnel: tunnel)
 
-                    OpenFluxCommunityCard()
-
                     Spacer(minLength: 12)
 
                     VStack(spacing: 14) {
@@ -486,6 +484,7 @@ struct OpenFluxAccessPortal: UIViewRepresentable {
 /// link that writes no `vkLink` (freeturn://, or an unchanged call link) left
 /// Connect greyed out on a config that had just become valid.
 private struct ActiveServerControls: View {
+    @AppStorage("showVKCommunityCard") private var showCommunityCard = true
     @ObservedObject private var store = ServerStore.shared
     @State private var buttonIgnited = false
 
@@ -684,6 +683,10 @@ private struct ActiveServerControls: View {
                 .multilineTextAlignment(.center)
 
             OpenFluxGetLinkButton()
+            if showCommunityCard && !buttonIgnited && !tunnel.preBootstrapInProgress &&
+                (tunnel.status == .disconnected || tunnel.status == .invalid) {
+                OpenFluxCommunityCard().padding(.top, 12)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -859,6 +862,7 @@ enum ServerMode: Int, CaseIterable, Identifiable {
 // MARK: - Settings Screen
 
 struct SettingsView: View {
+    @AppStorage("showVKCommunityCard") private var showCommunityCard = true
     @Environment(\.presentationMode) private var presentationMode
     // Only the two GLOBAL settings live here. Every per-server field moved to
     // ServerEditView (build 173-180) and is edited through ServerStore; the 20
@@ -1138,6 +1142,11 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(OpenFluxStyle.muted)
                     }
+                }
+
+                OpenFluxCard {
+                    Toggle("Показывать группу ВКонтакте", isOn: $showCommunityCard)
+                        .font(.system(size: 17, weight: .semibold))
                 }
 
                 LogsView(tunnel: tunnel, embedded: true,
