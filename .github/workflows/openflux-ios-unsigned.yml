@@ -106,7 +106,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-473-unsigned
+          name: OpenFlux-iOS-474-unsigned
           path: |
             openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
             openflux-ios/build_output/SHA256SUMS.txt
@@ -116,7 +116,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-473-build-log
+          name: OpenFlux-iOS-474-build-log
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7

@@ -111,7 +111,9 @@ struct ContentView: View {
                     // Keep active-server observation below the NavigationView host.
                     ActiveServerControls(tunnel: tunnel)
 
-                    Spacer(minLength: 35)
+                    OpenFluxCommunityCard()
+
+                    Spacer(minLength: 12)
 
                     VStack(spacing: 14) {
                         Text("♢  Трафик — через VPN")
