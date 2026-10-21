@@ -14,12 +14,6 @@ import Foundation
 struct ServerProfile: Codable, Identifiable, Equatable {
     static let recommendedCsqttConnections = 27
 
-    mutating func applyRecommendedCsqttTransport() {
-        guard useCsqtt else { return }
-        useUDP = true
-        numConnections = Self.recommendedCsqttConnections
-    }
-
     var id: UUID = UUID()
     var serverName: String = "Server1"
 

@@ -26,21 +26,20 @@ let saved = Data(#"{"id":"00000000-0000-0000-0000-000000000001","serverName":"Ex
 var existing = try JSONDecoder().decode(ServerProfile.self, from: saved)
 precondition(!existing.useUDP && existing.numConnections == 30)
 let identity = existing.id
-existing.applyRecommendedCsqttTransport()
-precondition(existing.useUDP && existing.numConnections == 27)
+existing.numConnections = 28
+precondition(!existing.useUDP && existing.numConnections == 28)
+existing.useUDP = true
+precondition(existing.useUDP && existing.numConnections == 28)
 precondition(existing.id == identity && existing.csqttPassword == "keep" && existing.csqttDeviceID == "keep-device")
 
 // Profile JSON is the same format persisted by ServerStore. Both directions
-// of the selector, the preset and explicit backup preferences must survive it.
+// of the selector and the chosen slider value must survive it.
 let udpReload = try JSONDecoder().decode(ServerProfile.self, from: JSONEncoder().encode(existing))
 precondition(udpReload == existing)
 existing.useUDP = false
 let tcpReload = try JSONDecoder().decode(ServerProfile.self, from: JSONEncoder().encode(existing))
-precondition(!tcpReload.useUDP && tcpReload.numConnections == 27)
-var unrelated = ordinary
-unrelated.applyRecommendedCsqttTransport()
-precondition(unrelated == ordinary)
+precondition(!tcpReload.useUDP && tcpReload.numConnections == 28)
 let backup = ServerSettings(existing)
 let restored = backup.profile
 precondition(restored.useUDP == existing.useUDP && restored.numConnections == existing.numConnections)
-print("OpenFlux transport checks passed: imports, saved profiles, preset, identities and persistence")
+print("OpenFlux transport checks passed: imports, saved profiles, adjustable worker count, identities and persistence")

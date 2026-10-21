@@ -857,7 +857,6 @@ enum ServerMode: Int, CaseIterable, Identifiable {
 // MARK: - Settings Screen
 
 struct SettingsView: View {
-    @AppStorage(HotspotCompatibility.preferenceKey) private var hotspotCompatibility = false
     @Environment(\.presentationMode) private var presentationMode
     // Only the two GLOBAL settings live here. Every per-server field moved to
     // ServerEditView (build 173-180) and is edited through ServerStore; the 20
@@ -906,7 +905,6 @@ struct SettingsView: View {
     @State private var connectionLinkInput = ""
     @State private var connectionLinkStatus = ""
     @State private var resolvingConnection = false
-    @State private var workerDraft = Double(ServerProfile.recommendedCsqttConnections)
     @State private var showFullScreenSupport = false
 
     // 1-Click Connection Link import, PASTE PATH ONLY. Same flow as Full
@@ -976,6 +974,17 @@ struct SettingsView: View {
     }
     private var canEditTransport: Bool {
         tunnel.status == .disconnected || tunnel.status == .invalid
+    }
+    // Read and persist the active profile directly, including accessibility
+    // adjustments. No separate draft can disagree with the next connection.
+    private var workerCount: Binding<Double> {
+        Binding(get: { Double(store.activeServer.numConnections) }, set: { value in
+            guard canEditTransport else { return }
+            var server = store.activeServer
+            server.numConnections = Int(min(workerLimit, max(9, value.rounded())))
+            guard server.numConnections != store.activeServer.numConnections else { return }
+            store.update(server)
+        })
     }
     private var udpTransport: Binding<Bool> {
         Binding(get: { store.activeServer.useUDP }, set: { value in
@@ -1102,16 +1111,6 @@ struct SettingsView: View {
                             Text("При проблемах с UDP попробуйте TCP. Изменения применятся при следующем подключении.")
                                 .font(.caption)
                                 .foregroundColor(OpenFluxStyle.muted)
-                            Button("27 потоков · UDP") {
-                                guard canEditTransport else { return }
-                                var server = store.activeServer
-                                server.applyRecommendedCsqttTransport()
-                                store.update(server)
-                                workerDraft = Double(server.numConnections)
-                            }
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(OpenFluxStyle.orange)
-                            .disabled(!canEditTransport)
                             if !canEditTransport {
                                 Text("Для изменения настроек отключите VPN")
                                     .font(.caption)
@@ -1127,33 +1126,15 @@ struct SettingsView: View {
                             Text("Параллельные потоки")
                                 .font(.system(size: 18, weight: .bold))
                             Spacer()
-                            Text("\(Int(workerDraft))")
+                            Text("\(store.activeServer.numConnections)")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(OpenFluxStyle.orange)
                         }
-                        Slider(value: $workerDraft, in: 9...workerLimit, step: 1,
-                               onEditingChanged: { editing in
-                            guard !editing else { return }
-                            var server = store.activeServer
-                            server.numConnections = Int(workerDraft)
-                            store.update(server)
-                        })
-                        .disabled(tunnel.status != .disconnected && tunnel.status != .invalid)
+                        Slider(value: workerCount, in: 9...workerLimit, step: 1)
+                            .disabled(!canEditTransport)
                         Text("Измените после отключения VPN")
                             .font(.caption)
                             .foregroundColor(OpenFluxStyle.muted)
-                    }
-                }
-
-                OpenFluxCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Toggle("Совместимость с раздачей", isOn: $hotspotCompatibility)
-                            .font(.system(size: 17, weight: .semibold))
-                            .disabled(tunnel.status != .disconnected && tunnel.status != .invalid)
-                        Text("Включите, если устройства без интернета при раздаче с iPhone. Изменяйте после отключения VPN, затем подключитесь снова.")
-                            .font(.caption).foregroundColor(OpenFluxStyle.muted)
-                        Text("VPN iPhone не распространяется на подключённые устройства. В этом режиме при обрыве VPN телефон может выйти в интернет напрямую.")
-                            .font(.caption).foregroundColor(OpenFluxStyle.muted)
                     }
                 }
 
@@ -1320,10 +1301,6 @@ struct SettingsView: View {
         .onAppear {
             refreshVKCookieInfo()
             connectionLinkInput = currentConnectionLink
-            workerDraft = Double(max(9, store.activeServer.numConnections))
-        }
-        .onChange(of: store.activeServerId) { _ in
-            workerDraft = Double(max(9, store.activeServer.numConnections))
         }
         .onChange(of: vkAuthEnabled) { enabled in
             // Non-destructive: do NOT clamp the stored Connections value — the cap
