@@ -708,13 +708,23 @@ private struct OpenFluxGetLinkButton: View {
         Group {
             if shouldShow {
                 Button { showPortal = true } label: {
-                    Text("Получить ссылку")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(LinearGradient(
-                            colors: [Color(red: 1, green: 0.35, blue: 0.09), Color(red: 1, green: 0.59, blue: 0.11)],
-                            startPoint: .leading, endPoint: .trailing), in: Capsule())
+                    HStack(spacing: 14) {
+                        Image(systemName: "link")
+                            .font(.system(size: 21, weight: .bold))
+                            .frame(width: 42, height: 42)
+                            .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                        Text("Получить ссылку").font(.system(size: 18, weight: .heavy))
+                        Spacer(minLength: 4)
+                        Image(systemName: "arrow.right").font(.system(size: 21, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .frame(maxWidth: .infinity, minHeight: 68)
+                    .background(LinearGradient(
+                        colors: [Color(red: 1, green: 0.35, blue: 0.09), Color(red: 1, green: 0.59, blue: 0.11)],
+                        startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(red: 1, green: 0.71, blue: 0.40), lineWidth: 1))
+                    .shadow(color: OpenFluxStyle.orange.opacity(0.24), radius: 12, y: 6)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 8)
