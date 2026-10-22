@@ -40,7 +40,7 @@ struct IOSUpdatePolicy: Codable, Equatable {
 
 enum IOSCheckoutRequest {
     static func make(password: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout/app")!)
+        var request = URLRequest(url: URL(string: "https://open-flux.ru/checkout/app")!)
         request.httpMethod = "POST"
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 20
@@ -75,6 +75,11 @@ enum IOSUpdateAPI {
            url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
            url.path.range(of: "^/ios/update/[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil { return url }
         return URL(string: "https://openfluxvpn.ru/ios")!
+    }
+    static func cabinetURL(_ raw: String?) -> URL {
+        let personal = installationURL(raw)
+        guard personal.path.hasPrefix("/ios/update/") else { return URL(string: "https://open-flux.ru/account#applications")! }
+        return URL(string: "https://open-flux.ru/ios/account/" + personal.lastPathComponent)!
     }
     static func validatedInstallURL(_ raw: String?) -> URL? {
         guard let raw, let parts = URLComponents(string: raw), parts.scheme == "itms-services",

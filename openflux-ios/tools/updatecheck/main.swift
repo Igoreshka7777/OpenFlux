@@ -49,3 +49,7 @@ for scenario in [(469, recoveryServer, 110.0), (471, UUID(), 110.0), (471, recov
 }
 recoveryDefaults.removePersistentDomain(forName: recoverySuite)
 print("Post-update VPN recovery checks passed")
+
+check(IOSUpdateAPI.cabinetURL(personal).absoluteString == "https://open-flux.ru/ios/account/" + String(repeating: "a", count: 43), "Update goes through cabinet with existing device")
+check(IOSUpdateAPI.cabinetURL("https://evil.example/ios/update/" + String(repeating: "a", count: 43)).absoluteString == "https://open-flux.ru/account#applications", "Untrusted device URL rejected")
+check(request.url?.absoluteString == "https://open-flux.ru/checkout/app", "Renewal authenticates into new cabinet")

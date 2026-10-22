@@ -35,19 +35,12 @@ struct IOSUpdateView: View {
                             openingInstall = true
                             Task { @MainActor in
                                 defer { openingInstall = false }
-                                let page = IOSUpdateAPI.installationURL(Bundle.main.object(forInfoDictionaryKey: "OpenFluxUpdateURL") as? String)
-                                if let install = await IOSUpdateAPI.readyInstallationURL(page) {
-                                    TunnelManager.shared.rememberConnectionForUpdate()
-                                    if !(await UIApplication.shared.open(install, options: [:])) {
-                                        await UIApplication.shared.open(page, options: [:])
-                                    }
-                                } else {
-                                    TunnelManager.shared.rememberConnectionForUpdate()
-                                    await UIApplication.shared.open(page, options: [:])
-                                }
+                                let page = IOSUpdateAPI.cabinetURL(Bundle.main.object(forInfoDictionaryKey: "OpenFluxUpdateURL") as? String)
+                                TunnelManager.shared.rememberConnectionForUpdate()
+                                await UIApplication.shared.open(page, options: [:])
                             }
                         } label: {
-                            Text(openingInstall ? "Проверяем готовность…" : "Установить обновление →").font(.headline).frame(maxWidth: .infinity).padding(18)
+                            Text(openingInstall ? "Открываем кабинет…" : "Обновить через кабинет →").font(.headline).frame(maxWidth: .infinity).padding(18)
                                 .background(OpenFluxStyle.orange, in: RoundedRectangle(cornerRadius: 14))
                         }.disabled(openingInstall)
                         if !monitor.required {
@@ -56,7 +49,7 @@ struct IOSUpdateView: View {
                                 .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                                 .foregroundColor(.white).disabled(openingInstall)
                         }
-                        Text("Готовое обновление устанавливается сразу после вашего подтверждения. Если файл ещё подписывается, откроется страница подготовки. Приложение удалять не нужно.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
+                        Text("В личном кабинете нажмите установку для iPhone. Если ваш сертификат и файл готовы, начнётся установка с подтверждением iOS. Приложение удалять не нужно.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
                         Text("Во время подготовки OpenFlux сохраняет VPN-соединение. При установке iOS может его прервать. После обновления откройте OpenFlux — приложение попробует восстановить ранее включённый VPN.").font(.footnote).foregroundColor(OpenFluxStyle.muted)
                     }
                 }
