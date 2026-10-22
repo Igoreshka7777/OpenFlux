@@ -15,7 +15,7 @@ private struct ReferralSummary: Decodable {
     }
     var valid: Bool {
         schema == 1 && currency == "RUB" && count >= 0 &&
-        url.range(of: #"^https://openfluxvpn\.ru/r/[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil
+        url.range(of: #"^https://open-flux\.ru/r/[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil
     }
 }
 
@@ -28,7 +28,7 @@ private final class ReferralRedirectPolicy: NSObject, URLSessionTaskDelegate {
 private enum ReferralAPI {
     static let session = URLSession(configuration: .ephemeral, delegate: ReferralRedirectPolicy(), delegateQueue: nil)
     static func fetch(password: String) async throws -> ReferralSummary {
-        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/api/client/referrals")!)
+        var request = URLRequest(url: URL(string: "https://open-flux.ru/api/client/referrals")!)
         request.timeoutInterval = 10
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("Bearer \(password)", forHTTPHeaderField: "Authorization")
