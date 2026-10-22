@@ -695,9 +695,6 @@ private struct ActiveServerControls: View {
 private struct OpenFluxGetLinkButton: View {
     @ObservedObject private var store = ServerStore.shared
     @ObservedObject private var monitor = SubscriptionMonitor.shared
-    @State private var showPortal = false
-    @State private var error = ""
-    @State private var showError = false
 
     private var password: String { store.activeServer.csqttPassword }
     private var shouldShow: Bool {
@@ -707,7 +704,11 @@ private struct OpenFluxGetLinkButton: View {
     var body: some View {
         Group {
             if shouldShow {
-                Button { showPortal = true } label: {
+                Button {
+                    if let url = URL(string: "https://open-flux.ru/account") {
+                        UIApplication.shared.open(url, options: [:])
+                    }
+                } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "link")
                             .font(.system(size: 21, weight: .bold))
@@ -728,31 +729,6 @@ private struct OpenFluxGetLinkButton: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 8)
-            }
-        }
-        .fullScreenCover(isPresented: $showPortal) {
-            NavigationView {
-                OpenFluxAccessPortal { link in
-                    do {
-                        let parsed = try BackupManager.parseConnectionLinkString(link)
-                        _ = ConnectionLinkPrompt.apply(parsed)
-                        UserDefaults.standard.set(link, forKey: "openFluxConnectionLink")
-                        showPortal = false
-                    } catch {
-                        self.error = "Не удалось принять ссылку: \(error.localizedDescription)"
-                        showError = true
-                    }
-                }
-                .navigationTitle("Получить ссылку")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Назад") { showPortal = false }
-                    }
-                }
-                .alert("OpenFlux", isPresented: $showError) {
-                    Button("ОК", role: .cancel) {}
-                } message: { Text(error) }
             }
         }
     }
