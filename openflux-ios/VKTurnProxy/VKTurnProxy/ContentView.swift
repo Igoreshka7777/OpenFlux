@@ -705,9 +705,8 @@ private struct OpenFluxGetLinkButton: View {
         Group {
             if shouldShow {
                 Button {
-                    if let url = URL(string: "https://open-flux.ru/account") {
-                        UIApplication.shared.open(url, options: [:])
-                    }
+                    let url = IOSUpdateAPI.cabinetURL(Bundle.main.object(forInfoDictionaryKey: "OpenFluxUpdateURL") as? String)
+                    UIApplication.shared.open(url, options: [:])
                 } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "link")
