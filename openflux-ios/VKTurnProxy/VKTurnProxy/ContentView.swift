@@ -430,7 +430,7 @@ struct OpenFluxAccessPortal: UIViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.isOpaque = false
         view.backgroundColor = UIColor(red: 0.035, green: 0.035, blue: 0.04, alpha: 1)
-        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/checkout")!)
+        var request = URLRequest(url: URL(string: "https://open-flux.ru/account")!)
         if let password = password, !password.isEmpty {
             request = IOSCheckoutRequest.make(password: password)
         }
@@ -458,7 +458,7 @@ struct OpenFluxAccessPortal: UIViewRepresentable {
                 UIApplication.shared.open(url)
                 return
             }
-            let trustedHosts = ["openfluxvpn.ru", "www.openfluxvpn.ru"]
+            let trustedHosts = ["openfluxvpn.ru", "www.openfluxvpn.ru", "open-flux.ru", "www.open-flux.ru"]
             decisionHandler(url.scheme == "https" && trustedHosts.contains(url.host ?? "") ? .allow : .cancel)
         }
     }
