@@ -71,10 +71,10 @@ enum IOSUpdateAPI {
         return policy
     }
     static func installationURL(_ raw: String?) -> URL {
-        if let raw = raw, let url = URL(string: raw), url.scheme == "https", url.host == "openfluxvpn.ru",
+        if let raw = raw, let url = URL(string: raw), url.scheme == "https", ["open-flux.ru", "openfluxvpn.ru"].contains(url.host ?? ""),
            url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
            url.path.range(of: "^/ios/update/[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil { return url }
-        return URL(string: "https://openfluxvpn.ru/ios")!
+        return URL(string: "https://open-flux.ru/ios")!
     }
     static func cabinetURL(_ raw: String?) -> URL {
         let personal = installationURL(raw)
@@ -88,7 +88,7 @@ enum IOSUpdateAPI {
               let items = parts.queryItems, items.count == 2,
               items.filter({ $0.name == "action" && $0.value == "download-manifest" }).count == 1,
               let manifest = items.first(where: { $0.name == "url" })?.value,
-              let url = URL(string: manifest), url.scheme == "https", url.host == "openfluxvpn.ru",
+              let url = URL(string: manifest), url.scheme == "https", ["open-flux.ru", "openfluxvpn.ru"].contains(url.host ?? ""),
               url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
               url.path.range(of: "^/ios/install/[A-Za-z0-9_-]{43}/manifest\\.plist$", options: .regularExpression) != nil
         else { return nil }
@@ -111,7 +111,7 @@ enum IOSUpdateAPI {
     }
     static func fetch(force: Bool = false) async -> IOSUpdatePolicy? {
         if !force && Date().timeIntervalSince1970 - defaults.double(forKey: key + "-checked") < 60 { return cached }
-        var request = URLRequest(url: URL(string: "https://openfluxvpn.ru/ios/updates/policy")!)
+        var request = URLRequest(url: URL(string: "https://open-flux.ru/ios/updates/policy")!)
         request.timeoutInterval = 8
         request.cachePolicy = .reloadIgnoringLocalCacheData
         do {

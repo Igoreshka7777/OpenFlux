@@ -12,7 +12,7 @@ private final class OpenFluxNoRedirect: NSObject, URLSessionTaskDelegate {
 enum OpenFluxShortLink {
     static func accepts(_ value: String) -> Bool {
         let raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.range(of: #"\Ahttps://openfluxvpn\.ru/s/[A-Za-z0-9_-]{22}\z"#,
+        return raw.range(of: #"\Ahttps://(?:open-flux\.ru|openfluxvpn\.ru)/s/[A-Za-z0-9_-]{22}\z"#,
                          options: .regularExpression) != nil
     }
     static func resolve(_ value: String) async throws -> String {

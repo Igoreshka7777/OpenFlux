@@ -14,7 +14,7 @@ check(!IOSUpdatePolicy(schema: 1, applicationID: policy.applicationID, latestBui
 let personal = "https://openfluxvpn.ru/ios/update/" + String(repeating: "a", count: 43)
 check(IOSUpdateAPI.installationURL(personal).absoluteString == personal, "Personal update link")
 for raw in ["http://openfluxvpn.ru/ios", "https://evil.example/ios", "https://openfluxvpn.ru@evil.example/ios", personal+"?redirect=evil"] {
-    check(IOSUpdateAPI.installationURL(raw).absoluteString == "https://openfluxvpn.ru/ios", "Unsafe update destination")
+    check(IOSUpdateAPI.installationURL(raw).absoluteString == "https://open-flux.ru/ios", "Unsafe update destination")
 }
 let request = IOSCheckoutRequest.make(password: "abc+&=# test")
 check(request.httpMethod == "POST", "Private credential uses body")
@@ -53,3 +53,8 @@ print("Post-update VPN recovery checks passed")
 check(IOSUpdateAPI.cabinetURL(personal).absoluteString == "https://open-flux.ru/ios/account/" + String(repeating: "a", count: 43), "Update goes through cabinet with existing device")
 check(IOSUpdateAPI.cabinetURL("https://evil.example/ios/update/" + String(repeating: "a", count: 43)).absoluteString == "https://open-flux.ru/account#applications", "Untrusted device URL rejected")
 check(request.url?.absoluteString == "https://open-flux.ru/checkout/app", "Renewal authenticates into new cabinet")
+
+let newPersonal = personal.replacingOccurrences(of: "openfluxvpn.ru", with: "open-flux.ru")
+check(IOSUpdateAPI.installationURL(newPersonal).absoluteString == newPersonal, "New domain personal update")
+check(IOSUpdateAPI.cabinetURL(newPersonal).absoluteString == "https://open-flux.ru/ios/account/" + String(repeating: "a", count: 43), "New domain retains device")
+check(IOSUpdateAPI.validatedInstallURL(installLink(manifest.replacingOccurrences(of: "openfluxvpn.ru", with: "open-flux.ru"))) != nil, "New domain manifest")
