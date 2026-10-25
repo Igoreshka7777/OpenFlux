@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -26,14 +26,14 @@ using Microsoft.Web.WebView2.Wpf;
 
 [assembly:System.Reflection.AssemblyTitle("OpenFlux")]
 [assembly:System.Reflection.AssemblyProduct("OpenFlux")]
-[assembly:System.Reflection.AssemblyVersion("1.0.2.0")]
-[assembly:System.Reflection.AssemblyFileVersion("1.0.2.0")]
+[assembly:System.Reflection.AssemblyVersion("1.0.5.0")]
+[assembly:System.Reflection.AssemblyFileVersion("1.0.5.0")]
 
 namespace OpenFlux {
 public class Profile {
     public string host, password, hashes, token;
     public int port;
-    public bool Panel { get { return host == "2.56.174.146" || host == "igoreshka7777.igoreshka777.org"; } }
+    public bool Panel { get { return host == "2.56.174.146" || host == "igoreshka7777.igoreshka777.org" || host == "vp3.openfluxvpn.ru"; } }
     public static Profile Parse(string raw) {
         if (String.IsNullOrWhiteSpace(raw) || raw.Length > 32768) throw new Exception("Вставьте полную ссылку csqtt:// из карточки клиента.");
         raw=raw.Trim().Replace("&amp;","&");
@@ -63,11 +63,37 @@ public class Profile {
         return new JavaScriptSerializer().Serialize(new {peer=(host.Contains(":")?"["+host+"]":host)+":"+port, password=password, hashes=hashes,token=token,device_id=id,workers=workers});
     }
 }
-public class Saved { public string link=""; public string id=Guid.NewGuid().ToString(); public int workers=18; }
+public static class ConnectionLinks {
+    public static bool IsShort(string raw) {
+        Uri u;
+        return Uri.TryCreate(raw.Trim(),UriKind.Absolute,out u) && u.Scheme=="https" && u.IsDefaultPort && u.UserInfo=="" && u.Query=="" && u.Fragment=="" &&
+            new[]{"open-flux.ru","www.open-flux.ru","openfluxvpn.ru","www.openfluxvpn.ru"}.Contains(u.Host.ToLowerInvariant()) && Regex.IsMatch(u.AbsolutePath,@"^/s/[A-Za-z0-9_-]{22}$");
+    }
+    public static async Task<string> Resolve(string raw,HttpMessageHandler transport=null) {
+        raw=(raw??"").Trim();
+        if(raw.StartsWith("csqtt://",StringComparison.OrdinalIgnoreCase)){Profile.Parse(raw);return raw;}
+        if(!IsShort(raw))throw new Exception("Вставьте ссылку OpenFlux вида https://open-flux.ru/s/… или полную ссылку csqtt://.");
+        using(var client=new HttpClient(transport??new HttpClientHandler{AllowAutoRedirect=false})) {
+            client.Timeout=TimeSpan.FromSeconds(15);client.MaxResponseContentBufferSize=32768;
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.openflux.connection");
+            using(var response=await client.GetAsync(raw)) {
+                if(response.StatusCode==HttpStatusCode.NotFound)throw new Exception("Ссылка не найдена. Скопируйте её заново из личного кабинета.");
+                if(!response.IsSuccessStatusCode)throw new Exception("Не удалось получить подключение. Проверьте интернет и повторите.");
+                string value=(await response.Content.ReadAsStringAsync()).Trim();Profile.Parse(value);return value;
+            }
+        }
+    }
+}
+public class Saved { public string link=""; public string id=Guid.NewGuid().ToString(); public int workers=30; public int settingsVersion=0; public string[] directApps=new string[0]; }
 public static class Storage {
     public static string Dir=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"OpenFlux");
     public static string FileName=System.IO.Path.Combine(Dir,"profile.dat");
-    public static Saved Load() { if(!File.Exists(FileName)) return new Saved(); return new JavaScriptSerializer().Deserialize<Saved>(Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(FileName),null,DataProtectionScope.CurrentUser))); }
+    public static Saved Load() {
+        if(!File.Exists(FileName)) return new Saved {settingsVersion=1};
+        var saved=new JavaScriptSerializer().Deserialize<Saved>(Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(FileName),null,DataProtectionScope.CurrentUser)));
+        if(saved.settingsVersion<1) { if(saved.workers==18) saved.workers=30; saved.settingsVersion=1; Save(saved); }
+        return saved;
+    }
     public static void Save(Saved s) {
         Directory.CreateDirectory(Dir); byte[] data=ProtectedData.Protect(Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(s)),null,DataProtectionScope.CurrentUser);
         string temp=FileName+".tmp"; File.WriteAllBytes(temp,data);
@@ -90,7 +116,7 @@ public class StartupBudget {
         return --SecondsLeft<=0;
     }
 }
-public class MainWindow : Window {
+public partial class MainWindow : Window {
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd,int attr,ref int value,int size);
     readonly Brush bg=new SolidColorBrush(Color.FromRgb(10,10,12)), fg=new SolidColorBrush(Color.FromRgb(247,246,246));
     readonly Brush muted=new SolidColorBrush(Color.FromRgb(155,151,160)), orange=new SolidColorBrush(Color.FromRgb(255,130,38));
@@ -126,7 +152,7 @@ public class MainWindow : Window {
         var settings=Btn("\uE713",()=>ShowSettings(),false); settings.FontFamily=new FontFamily("Segoe MDL2 Assets");settings.FontSize=23;settings.Padding=new Thickness(12,9,12,9);DockPanel.SetDock(settings,Dock.Right);header.Children.Add(settings);
         var logo=Text("",22);logo.Inlines.Add(new Run("●  "){Foreground=orange});logo.Inlines.Add("O P E N F L U X");logo.FontWeight=FontWeights.Bold;logo.VerticalAlignment=VerticalAlignment.Center;header.Children.Add(logo);
         content=new Grid();Grid.SetRow(content,1);root.Children.Add(header);root.Children.Add(content);Content=root;
-        Closing+=async (s,e)=>{ if(core!=null && !core.HasExited) {e.Cancel=true;closeAfter=true;await Stop("Приложение закрыто");} else {poll.Stop();logRefresh.Stop();if(tray!=null)tray.Dispose();} };
+        Closing+=async (s,e)=>{ if(core!=null && !core.HasExited) {e.Cancel=true;closeAfter=true;await Stop("Приложение закрыто");} else {StopAppRouter();poll.Stop();logRefresh.Stop();if(tray!=null)tray.Dispose();} };
         if(!preview) {
             tray=new System.Windows.Forms.NotifyIcon {Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"OpenFlux.ico")),Text="OpenFlux",Visible=true};
             tray.DoubleClick+=(s,e)=>{Show();WindowState=WindowState.Normal;Activate();};
@@ -146,7 +172,7 @@ public class MainWindow : Window {
     Button Btn(string title,Action action,bool primary) {var b=new Button{Content=title};if(primary)b.Background=new LinearGradientBrush(Color.FromRgb(247,71,38),Color.FromRgb(255,134,14),0);b.Click+=(s,e)=>action();return b;}
     Border Card(UIElement c) {return new Border{Background=new SolidColorBrush(Color.FromRgb(24,22,28)),CornerRadius=new CornerRadius(22),Padding=new Thickness(22),Margin=new Thickness(0,12,0,8),Child=c};}
     StackPanel Page(string title) {content.Children.Clear();chatMessages=null;logBox=null;subscription=null;var stack=new StackPanel();var back=Btn("←  Назад",()=>ShowHome(),false);back.HorizontalAlignment=HorizontalAlignment.Left;stack.Children.Add(back);stack.Children.Add(Text(title,27));content.Children.Add(new ScrollViewer{Content=stack,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});return stack;}
-    void ShowWelcome() {var p=Page("Добро пожаловать");p.Children.Add(Text("Ваш OpenFlux для Windows",19));p.Children.Add(Card(Text("Вставьте личную ссылку подключения. Она сохранится на этом компьютере.")));p.Children.Add(Btn("ДОБАВИТЬ ССЫЛКУ",()=>ShowSettings(),true));p.Children.Add(Btn("ПОЛУЧИТЬ ДОСТУП",()=>OpenUrl("https://193.233.223.211/get"),false));}
+    void ShowWelcome() {var p=Page("Добро пожаловать");p.Children.Add(Text("Ваш OpenFlux для Windows",19));p.Children.Add(Card(Text("Вставьте личную ссылку подключения. Она сохранится на этом компьютере.")));p.Children.Add(Btn("ДОБАВИТЬ ССЫЛКУ",()=>ShowSettings(),true));p.Children.Add(Btn("ПОЛУЧИТЬ ДОСТУП",()=>OpenUrl("https://open-flux.ru/account"),false));}
     void ShowHome() {
         content.Children.Clear();chatMessages=null;subscription=null;logBox=null;
         var grid=new Grid();grid.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});
@@ -172,26 +198,27 @@ public class MainWindow : Window {
         card.Children.Add(link);card.Children.Add(shownLink);
         var reveal=Btn("Показать ссылку",()=>{if(shownLink.Visibility==Visibility.Collapsed){shownLink.Text=link.Password;shownLink.Visibility=Visibility.Visible;link.Visibility=Visibility.Collapsed;}else{link.Password=shownLink.Text;link.Visibility=Visibility.Visible;shownLink.Visibility=Visibility.Collapsed;}},false);card.Children.Add(reveal);
         card.Children.Add(Btn("Вставить из буфера",()=>{try {string s=Clipboard.GetText().Trim();link.Password=s;shownLink.Text=s;}catch{saveHint.Text="Не удалось прочитать буфер обмена.";}},false));
-        card.Children.Add(Btn("Сохранить ссылку",()=>{try {if(core!=null&&!core.HasExited)throw new Exception("Сначала отключите VPN.");string s=shownLink.Visibility==Visibility.Visible?shownLink.Text:link.Password;Profile.Parse(s);saved.link=s.Trim();Storage.Save(saved);saveHint.Text="Ссылка сохранена";RefreshSubscription(false);}catch(Exception e){saveHint.Text=e.Message;}},true));
+        card.Children.Add(Btn("Сохранить ссылку",async()=>{try {if(core!=null&&!core.HasExited)throw new Exception("Сначала отключите VPN.");string s=shownLink.Visibility==Visibility.Visible?shownLink.Text:link.Password;saveHint.Text="Проверяем ссылку…";await ConnectionLinks.Resolve(s);if(core!=null&&!core.HasExited)throw new Exception("Сначала отключите VPN.");saved.link=s.Trim();Storage.Save(saved);saveHint.Text="Ссылка сохранена";await RefreshSubscription(false);}catch(TaskCanceledException){saveHint.Text="Сайт не ответил вовремя. Проверьте интернет и повторите.";}catch(Exception e){saveHint.Text=e is HttpRequestException?"Нет соединения с сайтом. Проверьте интернет и повторите.":e.Message;}},true));
         saveHint=Text(saved.link==""?"":"Ссылка сохранена",12);saveHint.Foreground=muted;card.Children.Add(saveHint);p.Children.Add(Card(card));
         var sub=new StackPanel();sub.Children.Add(Text("Подписка",18));subscription=Text("Нажмите «Обновить»",18);subscription.Foreground=orange;subscription.Margin=new Thickness(0,12,0,10);sub.Children.Add(subscription);
-        sub.Children.Add(Btn("Обновить",async()=>await RefreshSubscription(true),false));sub.Children.Add(Btn("Продлить подписку",()=>OpenUrl("https://2.56.174.146/renew"),false));p.Children.Add(Card(sub));
-        var workerPanel=new StackPanel();var label=Text("Параллельные потоки: "+saved.workers,17);workerPanel.Children.Add(label);workers=new Slider{Minimum=3,Maximum=27,TickFrequency=3,IsSnapToTickEnabled=true,Value=saved.workers,Margin=new Thickness(0,18,0,10),IsEnabled=core==null||core.HasExited};workers.ValueChanged+=(s,e)=>{saved.workers=(int)workers.Value;label.Text="Параллельные потоки: "+saved.workers;try{Storage.Save(saved);}catch{}};workerPanel.Children.Add(workers);workerPanel.Children.Add(Text("Применяется при следующем подключении",12));p.Children.Add(Card(workerPanel));
-        p.Children.Add(Btn("Журнал VPN",()=>ShowLog(),false));p.Children.Add(Btn("Поддержка",()=>ShowChat(),true));p.Children.Add(Btn("Восстановить сеть",async()=>await Repair(),false));var id=Text("ID компьютера: "+saved.id+"\nOpenFlux 1.0.2 · Windows x64",11);id.Foreground=muted;id.Margin=new Thickness(0,18,0,4);p.Children.Add(id);
+        sub.Children.Add(Btn("Обновить",async()=>await RefreshSubscription(true),false));sub.Children.Add(Btn("Продлить подписку",()=>OpenUrl("https://open-flux.ru/account"),false));p.Children.Add(Card(sub));
+        var workerPanel=new StackPanel();var label=Text("Параллельные потоки: "+saved.workers,17);workerPanel.Children.Add(label);workers=new Slider{Minimum=3,Maximum=30,TickFrequency=3,IsSnapToTickEnabled=true,Value=saved.workers,Margin=new Thickness(0,18,0,10),IsEnabled=core==null||core.HasExited};workers.ValueChanged+=(s,e)=>{saved.workers=(int)workers.Value;label.Text="Параллельные потоки: "+saved.workers;try{Storage.Save(saved);}catch{}};workerPanel.Children.Add(workers);workerPanel.Children.Add(Text("Применяется при следующем подключении",12));p.Children.Add(Card(workerPanel));
+        p.Children.Add(Btn("Приложения без VPN",()=>ShowAppExclusions(),false));p.Children.Add(Btn("Журнал VPN",()=>ShowLog(),false));p.Children.Add(Btn("Поддержка",()=>ShowChat(),true));p.Children.Add(Btn("Восстановить сеть",async()=>await Repair(),false));var id=Text("ID компьютера: "+saved.id+"\nOpenFlux 1.0.5 · Windows x64",11);id.Foreground=muted;id.Margin=new Thickness(0,18,0,4);p.Children.Add(id);
         if(!preview)RefreshSubscription(false);
     }
     async Task Connect() {
+        if(connecting)return;connecting=true;
         try {
-            current=Profile.Parse(saved.link);
+            current=Profile.Parse(await ConnectionLinks.Resolve(saved.link)); if(HasExclusions)physicalInterface=AppRouter.PhysicalInterface();
             string path=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"openflux-core.exe");
-            if(!File.Exists(path))throw new Exception("Распакуйте весь архив OpenFlux: рядом с приложением должно быть сетевое ядро.");
-            ready=false;stopping=false;stopReason="";logs.Clear();lastLog="";started=DateTime.UtcNow;int run=++generation;
+            if(!File.Exists(path))throw new Exception("Не найден сетевой модуль. Повторно установите OpenFlux.");
+            ready=false;stopping=false;stopReason="";routerStarting=false;logs.Clear();lastLog="";started=DateTime.UtcNow;int run=++generation;
             var ps=new ProcessStartInfo(path){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,StandardOutputEncoding=Encoding.UTF8,StandardErrorEncoding=Encoding.UTF8,WorkingDirectory=AppDomain.CurrentDomain.BaseDirectory};
             core=new Process{StartInfo=ps,EnableRaisingEvents=true};var child=core;
             child.OutputDataReceived+=(s,e)=>{if(e.Data!=null)Dispatcher.BeginInvoke(new Action(()=>{if(run==generation)HandleLine(e.Data);}));};
             child.ErrorDataReceived+=(s,e)=>{if(e.Data!=null)Dispatcher.BeginInvoke(new Action(()=>{if(run==generation)HandleLine(e.Data);}));};
             child.Exited+=(s,e)=>Task.Run(()=>{child.WaitForExit();Dispatcher.BeginInvoke(new Action(()=>{
-                if(run!=generation)return;ready=false;stopping=false;if(captcha!=null)captcha.Close();
+                if(run!=generation)return;StopAppRouter();ready=false;stopping=false;if(captcha!=null)captcha.Close();
                 if(stopReason=="")stopReason="Сетевое ядро завершилось (код "+child.ExitCode+"). Причина — в журнале.";
                 AddLog("VPN остановлен. Причина: "+stopReason);SaveLastLog();PaintState();if(closeAfter)Close();
             }));});
@@ -202,11 +229,11 @@ public class MainWindow : Window {
                 if(run!=generation || child.HasExited || stopping)break;
                 if(budget.Tick(captchaBusy,ready)){await Stop("Сервер не подтвердил настройку VPN за 3 минуты (время проверки VK не учитывается).");break;}
             }
-        } catch(Exception e) {AddLog(e.Message);MessageBox.Show(e.Message,"OpenFlux",MessageBoxButton.OK,MessageBoxImage.Information);PaintState();}
+        } catch(Exception e) {AddLog(e.Message);MessageBox.Show(e.Message,"OpenFlux",MessageBoxButton.OK,MessageBoxImage.Information);PaintState();} finally {connecting=false;}
     }
     async Task Stop(string reason="Отключено пользователем") {
         if(core==null||core.HasExited||stopping)return;stopReason=Redaction.Clean(reason,current);AddLog("Причина остановки: "+stopReason);stopping=true;PaintState();if(captcha!=null)captcha.Close();
-        var child=core;try{child.StandardInput.WriteLine("STOP");child.StandardInput.Flush();child.StandardInput.Close();}catch{}
+        StopAppRouter();var child=core;try{child.StandardInput.WriteLine("STOP");child.StandardInput.Flush();child.StandardInput.Close();}catch{}
         // Wait for route/DNS cleanup rather than killing the network process.
         for(int i=0;i<120 && !child.HasExited;i++)await Task.Delay(250);
         if(!child.HasExited){AddLog("Отключение ещё выполняется. Ожидаем восстановления сети.");if(hint!=null)hint.Text="Восстанавливаем обычное подключение…";}
@@ -220,8 +247,8 @@ public class MainWindow : Window {
         if(line.StartsWith("__CSQTT_EVENT__|")) {
             var parts=line.Split(new[]{'|'},3);if(parts.Length<3)return;
             try{var v=json.Deserialize<Dictionary<string,object>>(parts[2]);
-                if(parts[1]=="TUNNEL_READY") {ready=true;PaintState();}
-                if(parts[1]=="STATS") {if(traffic!=null)traffic.Text="Потоки: "+v["active"]+"  ·  Трафик: "+((Convert.ToDouble(v["bytes_up"])+Convert.ToDouble(v["bytes_down"]))/1048576).ToString("0.0")+" МБ";}
+                if(parts[1]=="TUNNEL_READY") {CompleteConnection();}
+                if(parts[1]=="STATS") {if(traffic!=null)traffic.Text="Активные потоки: "+v["active"]+" / "+saved.workers+"  ·  Трафик: "+((Convert.ToDouble(v["bytes_up"])+Convert.ToDouble(v["bytes_down"]))/1048576).ToString("0.0")+" МБ";}
                 if(parts[1]=="ERROR"){string code=Convert.ToString(v["code"]);AddLog("Ошибка: "+Convert.ToString(v["message"]));if(v.ContainsKey("fatal")&&Convert.ToBoolean(v["fatal"])){stopReason=Redaction.Clean(Convert.ToString(v["message"]),current);Stop(stopReason);}}
             }catch{}return;
         }
@@ -240,10 +267,10 @@ public class MainWindow : Window {
 
     void ShowLog() {var p=Page("Журнал VPN");logBox=new TextBox{Text=String.Join(Environment.NewLine,logs),IsReadOnly=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Height=420,FontFamily=new FontFamily("Consolas"),FontSize=12,Margin=new Thickness(0,18,0,10)};p.Children.Add(logBox);p.Children.Add(Btn("Копировать журнал",()=>{try{Clipboard.SetText(String.Join(Environment.NewLine,logs));}catch{}},false));p.Children.Add(Btn("Сохранить журнал в файл",()=>ExportLog(),true));p.Children.Add(Btn("Очистить",()=>{logs.Clear();lastLog="";logBox.Clear();SaveLastLog();},false));}
     async Task<Dictionary<string,object>> Api(string route,string body=null) {
-        var p=Profile.Parse(saved.link);if(!p.Panel)throw new Exception("Этот сервер не поддерживает панель OpenFlux.");
+        var p=Profile.Parse(await ConnectionLinks.Resolve(saved.link));if(!p.Panel&&!ConnectionLinks.IsShort(saved.link))throw new Exception("Для этого сервера используйте короткую ссылку из личного кабинета OpenFlux.");
         using(var client=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false})) {
             client.Timeout=TimeSpan.FromSeconds(8);client.DefaultRequestHeaders.Authorization=new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",p.password);
-            HttpResponseMessage r=body==null?await client.GetAsync("https://2.56.174.146/api/client/"+route):await client.PostAsync("https://2.56.174.146/api/client/"+route,new StringContent(body,Encoding.UTF8,"application/json"));
+            HttpResponseMessage r=body==null?await client.GetAsync("https://open-flux.ru/api/client/"+route):await client.PostAsync("https://open-flux.ru/api/client/"+route,new StringContent(body,Encoding.UTF8,"application/json"));
             r.EnsureSuccessStatusCode();return json.Deserialize<Dictionary<string,object>>(await r.Content.ReadAsStringAsync());
         }
     }
@@ -251,10 +278,13 @@ public class MainWindow : Window {
         if(preview||apiBusy||saved.link=="")return;apiBusy=true;
         try {var v=await Api("subscription");string status=Convert.ToString(v["state"]),caption;
             if(status=="expired")caption="Подписка закончилась";
+            else if(status=="disabled")caption="Подписка отключена";
+            else if(status=="limit")caption="Лимит трафика исчерпан";
+            else if(status!="active")caption="Срок временно недоступен";
             else if(v["expires_at"]==null)caption="Без ограничения срока";
             else {double days=Math.Ceiling((Convert.ToDouble(v["expires_at"])-Convert.ToDouble(v["server_time"]))/86400);caption="Осталось дней: "+Math.Max(0,days);}
             if(subscription!=null)subscription.Text=caption;
-            if(status=="expired" && core!=null&&!core.HasExited){await Stop("Подписка закончилась");if(MessageBox.Show("Подписка закончилась. Открыть страницу продления?","OpenFlux",MessageBoxButton.YesNo)==MessageBoxResult.Yes)OpenUrl("https://2.56.174.146/renew");}
+            if(status=="expired" && core!=null&&!core.HasExited){await Stop("Подписка закончилась");if(MessageBox.Show("Подписка закончилась. Открыть страницу продления?","OpenFlux",MessageBoxButton.YesNo)==MessageBoxResult.Yes)OpenUrl("https://open-flux.ru/account");}
         }catch{if(subscription!=null)subscription.Text="Не удалось получить срок";if(explicitRequest)AddLog("Срок подписки временно недоступен. Это не мешает запуску VPN.");}finally{apiBusy=false;}
     }
     void ShowChat() {
@@ -294,7 +324,7 @@ public class MainWindow : Window {
     static bool VkHost(string h){return new[]{"vk.com","vk.ru","vk.me","vkuser.net"}.Any(d=>h==d||h.EndsWith("."+d,StringComparison.OrdinalIgnoreCase));}
     void SendControl(string command){try{if(core!=null&&!core.HasExited){core.StandardInput.WriteLine(command);core.StandardInput.Flush();}}catch{}}
     static void OpenUrl(string url){Uri u;if(Uri.TryCreate(url,UriKind.Absolute,out u)&&u.Scheme=="https")try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}catch{MessageBox.Show("Не удалось открыть браузер.","OpenFlux");}}
-    public void Preview(string page,string output) {if(page=="settings")ShowSettings();else if(page=="support")ShowChat();else ShowHome();var view=(FrameworkElement)Content;view.Measure(new Size(540,760));view.Arrange(new Rect(0,0,540,760));view.UpdateLayout();var drawing=new DrawingVisual();using(var dc=drawing.RenderOpen()){dc.DrawRectangle(bg,null,new Rect(0,0,540,760));}var bmp=new RenderTargetBitmap(540,760,96,96,PixelFormats.Pbgra32);bmp.Render(drawing);bmp.Render(view);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using(var f=File.Create(output))png.Save(f);}
+    public void Preview(string page,string output) {if(page=="exclusions")ShowAppExclusions();else if(page=="settings")ShowSettings();else if(page=="support")ShowChat();else ShowHome();var view=(FrameworkElement)Content;view.Measure(new Size(540,760));view.Arrange(new Rect(0,0,540,760));view.UpdateLayout();var drawing=new DrawingVisual();using(var dc=drawing.RenderOpen()){dc.DrawRectangle(bg,null,new Rect(0,0,540,760));}var bmp=new RenderTargetBitmap(540,760,96,96,PixelFormats.Pbgra32);bmp.Render(drawing);bmp.Render(view);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bmp));using(var f=File.Create(output))png.Save(f);}
 }
 public static class Program {
     [STAThread] public static void Main(string[] args) {

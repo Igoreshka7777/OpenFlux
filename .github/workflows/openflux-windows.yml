@@ -26,6 +26,11 @@ jobs:
       - name: Protocol tests
         working-directory: windows/core
         run: cargo +1.97.1 test --locked --lib protocol::tests
+      - name: Exact worker count tests
+        working-directory: windows/core
+        run: |
+          cargo +1.97.1 test --locked --lib worker_count_tests
+          cargo +1.97.1 test --locked --lib partial_worker_group_tests
       - name: Build OpenFlux interface
         shell: pwsh
         run: ./windows/build.ps1

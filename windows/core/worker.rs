@@ -267,7 +267,7 @@ async fn run_group(
         return;
     }
     let mut workers = tokio::task::JoinSet::new();
-    for id in group_worker_ids(group_id) {
+    for id in group_worker_ids(group_id).take_while(|id| *id <= context.params.workers) {
         let worker_context = context.clone();
         let worker_creds = group_creds.clone();
         workers.spawn(async move {
@@ -1659,5 +1659,18 @@ mod tests {
         assert!(is_transport_timeout("operation timed out"));
         assert!(!is_transport_timeout("turn channelbind: stun error 438"));
         assert!(!is_transport_timeout("turn allocate: stun error 486"));
+    }
+}
+
+#[cfg(test)]
+mod partial_worker_group_tests {
+    use super::*;
+    #[test]
+    fn thirty_workers_are_spawned_exactly_once() {
+        let count = 30usize;
+        let ids: Vec<_> = (1..=count.div_ceil(WORKERS_PER_GROUP))
+            .flat_map(|group| group_worker_ids(group).take_while(move |id| *id <= count)).collect();
+        assert_eq!(ids, (1..=30).collect::<Vec<_>>());
+        assert_eq!(group_worker_ids(4).take_while(|id| *id <= 30).count(), 3);
     }
 }

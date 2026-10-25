@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 fn main() -> anyhow::Result<()> {
     if std::env::args().any(|a| a == "--version") {
-        println!("OpenFlux Windows 1.0.2 | CSQTT-WIRE-3");
+        println!("OpenFlux Windows 1.0.5 | CSQTT-WIRE-3");
         return Ok(());
     }
     #[cfg(windows)] csqtt_core::tun_win::teardown();
@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
     let config = ClientConfig {
         peer: field("peer"), password: field("password"), vk: field("hashes"),
         device_id: field("device_id"), vk_js_token: field("token"),
-        workers: v["workers"].as_u64().unwrap_or(18).clamp(3,54) as usize,
+        workers: v["workers"].as_u64().unwrap_or(30).clamp(3,54) as usize,
         vk_hash_mode: if field("hashes").is_empty() { "auto_js" } else { "manual" }.into(),
         vk_auth_mode: "vkcalls".into(), captcha_mode: "wv".into(),
         tun_uds: "wintun".into(), ..ClientConfig::default()

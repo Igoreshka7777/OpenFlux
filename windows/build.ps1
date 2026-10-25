@@ -7,5 +7,6 @@ foreach ($dll in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Wpf
 Copy-Item (Join-Path $base 'deps/WebView2Loader.dll') $out -Force
 Copy-Item (Join-Path $base 'deps/LICENSE.txt') (Join-Path $out 'LICENSE-WebView2.txt') -Force
 $source=(Join-Path $base 'app\OpenFlux.cs')
-& (Join-Path $fw 'csc.exe') /nologo /target:winexe /platform:x64 /optimize+ /utf8output "/win32manifest:$base\app\app.manifest" "/win32icon:$out\OpenFlux.ico" "/out:$out\OpenFlux.exe" $refs $source
+& (Join-Path $fw 'csc.exe') /nologo /target:winexe /platform:x64 /optimize+ /utf8output "/win32manifest:$base\app\app.manifest" "/win32icon:$out\OpenFlux.ico" "/out:$out\OpenFlux.exe" $refs $source (Join-Path $base 'app\AppExclusions.cs')
 if ($LASTEXITCODE -ne 0) {throw 'C# build failed'}
+

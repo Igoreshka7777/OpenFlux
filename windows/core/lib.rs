@@ -256,7 +256,7 @@ pub async fn run_client(arguments: ClientConfig, external_cancel: Option<Cancell
         hashes.len(),
         arguments.allow_hash_redistribution || js_hash_mode,
     );
-    let groups = workers / WORKERS_PER_GROUP;
+    let groups = workers.div_ceil(WORKERS_PER_GROUP);
     let cancel = external_cancel.unwrap_or_else(CancellationToken::new);
     // [FOCSQ] VK API — CDN с ротацией IP: резолвим хосты сразу (пока DNS
     // не перехвачен) и повторяем в течение сессии, добавляя свежие адреса
@@ -555,7 +555,7 @@ fn required_js_ready_bots(groups: usize) -> usize {
 }
 
 fn normalize_worker_count(requested: usize) -> usize {
-    requested.clamp(WORKERS_PER_GROUP, MAX_WORKERS) / WORKERS_PER_GROUP * WORKERS_PER_GROUP
+    requested.clamp(3, MAX_WORKERS) / 3 * 3
 }
 
 fn normalize_worker_count_for_hashes(
@@ -566,7 +566,7 @@ fn normalize_worker_count_for_hashes(
     if allow_hash_redistribution {
         return normalize_worker_count(requested);
     }
-    let maximum = hash_count.clamp(1, MAX_VK_HASHES) * GROUPS_PER_VK_HASH * WORKERS_PER_GROUP;
+    let maximum = (hash_count.clamp(1, MAX_VK_HASHES) * 30).min(MAX_WORKERS);
     normalize_worker_count(requested).min(maximum)
 }
 
@@ -798,19 +798,20 @@ mod worker_count_tests {
     }
 
     #[test]
-    fn invalid_totals_never_create_partial_or_excess_group() {
+    fn totals_allow_partial_groups_without_exceeding_capacity() {
         for requested in 0..=1_000 {
             let workers = normalize_worker_count(requested);
-            assert!((WORKERS_PER_GROUP..=MAX_WORKERS).contains(&workers));
-            assert_eq!(workers % WORKERS_PER_GROUP, 0);
+            assert!((3..=MAX_WORKERS).contains(&workers));
+            assert_eq!(workers % 3, 0);
         }
     }
 
     #[test]
-    fn hash_count_caps_native_worker_admission_to_twenty_seven_each() {
-        assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 1, false), 27);
-        assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 4, false), 108);
-        assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 5, false), 135);
+    fn hash_count_admits_thirty_workers_per_hash() {
+        assert_eq!(normalize_worker_count_for_hashes(30, 1, false), 30);
+        assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 1, false), 30);
+        assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 4, false), 120);
+        assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 5, false), 150);
         assert_eq!(normalize_worker_count_for_hashes(usize::MAX, 6, false), 162);
         assert_eq!(
             normalize_worker_count_for_hashes(usize::MAX, 100, false),
@@ -822,7 +823,7 @@ mod worker_count_tests {
     fn automatic_call_failure_may_redistribute_complete_groups() {
         assert_eq!(normalize_worker_count_for_hashes(162, 5, true), 162);
         assert_eq!(normalize_worker_count_for_hashes(54, 1, true), 54);
-        assert_eq!(normalize_worker_count_for_hashes(50, 1, true), 45);
+        assert_eq!(normalize_worker_count_for_hashes(50, 1, true), 48);
     }
 
     #[test]
