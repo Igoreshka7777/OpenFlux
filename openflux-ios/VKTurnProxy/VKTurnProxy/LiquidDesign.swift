@@ -4,26 +4,26 @@ import NetworkExtension
 struct LiquidCabinetButton: View {
     var body: some View {
         Link(destination: URL(string: "https://open-flux.ru/account")!) {
-            HStack { Image(systemName: "person"); Text("Личный кабинет"); Spacer(); Image(systemName: "arrow.up.right") }
-                .font(.system(size: 17, weight: .medium)).foregroundColor(Color(red: 1, green: 0.89, blue: 0.77))
-                .padding(20).frame(maxWidth: .infinity)
-                .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(OpenFluxStyle.orange.opacity(0.45)))
+            HStack { Image(systemName: "person"); Text("Личный кабинет"); Spacer(); Image(systemName: "chevron.right") }
+                .font(.system(size: 14, weight: .medium)).foregroundColor(Color(red: 1, green: 0.89, blue: 0.77))
+                .padding(16).frame(maxWidth: .infinity)
+                .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(OpenFluxStyle.orange.opacity(0.45)))
         }.buttonStyle(.plain)
     }
 }
 
 struct LiquidNavigation: View {
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 18) {
-                Text("Главная").foregroundColor(OpenFluxStyle.orange)
-                NavigationLink("Подписка", destination: LiquidSection(kind: "Подписка"))
-                NavigationLink("Рефералы", destination: LiquidSection(kind: "Рефералы"))
-                NavigationLink("Приложения", destination: LiquidSection(kind: "Приложения"))
-                NavigationLink("Настройки", destination: SettingsView())
-            }.font(.system(size: 14)).foregroundColor(Color(red: 1, green: 0.89, blue: 0.77)).padding(.vertical, 12)
-        }
+        HStack {
+            navIcon("Главная", "house.fill").foregroundColor(OpenFluxStyle.orange)
+            NavigationLink(destination: LiquidSection(kind: "Подписка")) { navIcon("Подписка", "crown") }
+            NavigationLink(destination: LiquidSection(kind: "Рефералы")) { navIcon("Рефералы", "person.2") }
+            NavigationLink(destination: SettingsView()) { navIcon("Настройки", "gearshape") }
+        }.foregroundColor(OpenFluxStyle.muted).padding(.vertical, 12)
+    }
+    private func navIcon(_ name: String, _ icon: String) -> some View {
+        VStack(spacing: 5) { Image(systemName: icon).font(.system(size: 18)); Text(name).font(.system(size: 9)) }.frame(maxWidth: .infinity)
     }
 }
 
@@ -90,20 +90,33 @@ struct LiquidPowerControl: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { timeline in
             let phase = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4.8) / 4.8 * .pi * 2
             ZStack {
-                Circle().fill(Color(red: 0.09, green: 0.04, blue: 0.02))
+                Circle().fill(RadialGradient(colors: [Color(red: 0.06, green: 0.03, blue: 0.02), Color(red: 0.15, green: 0.07, blue: 0.03), Color(red: 0.46, green: 0.19, blue: 0.02)], center: .init(x: 0.5, y: 0.3), startRadius: 0, endRadius: 260))
                 LiquidWave(level: fill, phase: phase)
                     .fill(LinearGradient(colors: [Color(red: 1, green: 0.76, blue: 0.2), Color(red: 1, green: 0.39, blue: 0), Color(red: 0.39, green: 0.09, blue: 0)], startPoint: .top, endPoint: .bottom))
                     .clipShape(Circle())
                 LiquidWave(level: fill, phase: phase)
                     .stroke(Color(red: 1, green: 0.85, blue: 0.49), lineWidth: 1.5).clipShape(Circle())
-                Circle().stroke(OpenFluxStyle.orange.opacity(0.14), lineWidth: 14).blur(radius: 6)
+                LiquidWave(level: fill, phase: phase + 1.2).stroke(Color.orange.opacity(0.8), lineWidth: 1).clipShape(Circle())
+                Circle().fill(RadialGradient(colors: [.clear, .black.opacity(0.25), .clear], center: .init(x: 0.55, y: 0.65), startRadius: 0, endRadius: 170))
+                Canvas { context, size in
+                    for i in 1...35 {
+                        let x = size.width * (0.5 + sin(Double(i) * 2.7) * 0.39)
+                        let y = size.height * (0.5 + sin(Double(i) * 4.3) * 0.39)
+                        if y > size.height * (1-fill) + 10 {
+                            let r = CGFloat(i % 3 + 1)
+                            context.stroke(Path(ellipseIn: CGRect(x:x,y:y,width:r*2,height:r*2)),with:.color(.yellow.opacity(0.28)),lineWidth:0.7)
+                        }
+                    }
+                }.clipShape(Circle())
+                Circle().stroke(OpenFluxStyle.orange.opacity(0.3), lineWidth: 10).blur(radius: 8)
+                Circle().inset(by: 5).stroke(Color.orange.opacity(0.7), lineWidth: 0.7)
                 Circle().stroke(LinearGradient(colors: [Color(red: 1, green: 0.94, blue: 0.7), OpenFluxStyle.orange, Color(red: 0.55, green: 0.19, blue: 0.02)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 2)
                 Ellipse().fill(LinearGradient(colors: [.white.opacity(0.17), .clear], startPoint: .top, endPoint: .bottom)).frame(width: 160, height: 65).offset(x: -32, y: -83).rotationEffect(.degrees(-18))
-                VStack(spacing: 14) {
+                VStack(spacing: 9) {
                     Image(systemName: "power").font(.system(size: 46, weight: .light))
-                    Text(status).font(.system(size: 19, weight: .medium))
-                    Text(daysLabel).font(.system(size: 24, weight: .semibold))
-                }.foregroundColor(Color(red: 1, green: 0.92, blue: 0.79)).shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                    Text(status).font(.system(size: 16, weight: .regular))
+                    Text(daysLabel).font(.system(size: 23, weight: .medium))
+                }.offset(y: 20).foregroundColor(Color(red: 1, green: 0.92, blue: 0.79)).shadow(color: .black.opacity(0.35), radius: 3, y: 1)
             }.padding(9)
         }.frame(maxWidth: 320).aspectRatio(1, contentMode: .fit)
             .contentShape(Circle()).accessibilityLabel(connected ? "Отключить VPN" : "Подключить VPN")
@@ -125,5 +138,41 @@ private struct LiquidWave: Shape {
         }
         path.addLine(to: CGPoint(x: rect.width, y: rect.height)); path.closeSubpath()
         return path
+    }
+}
+
+struct LiquidStats: View {
+    @ObservedObject private var store = ServerStore.shared
+    @ObservedObject private var monitor = SubscriptionMonitor.shared
+    @State private var balance: String = "— ₽"
+    private var days: String {
+        guard let access = monitor.entries[store.activeServer.csqttPassword]?.status else { return "—" }
+        guard access.state == "active" else { return "Не активна" }
+        return access.daysRemaining.map { "\($0) дн." } ?? "Без лимита"
+    }
+    var body: some View {
+        HStack(spacing: 10) {
+            NavigationLink(destination: LiquidSection(kind: "Подписка")) { stat("Подписка",days,"осталось","crown") }
+            NavigationLink(destination: LiquidSection(kind: "Рефералы")) { stat("Бонусы",balance,"на балансе","gift") }
+        }.buttonStyle(.plain).task(id: store.activeServer.csqttPassword) {
+            balance = "— ₽"
+            guard !store.activeServer.csqttPassword.isEmpty else { return }
+            if let summary = try? await ReferralAPI.fetch(password: store.activeServer.csqttPassword) {
+                let formatter = NumberFormatter(); formatter.maximumFractionDigits = 2; formatter.locale = Locale(identifier: "ru_RU"); formatter.numberStyle = .decimal
+                balance = (formatter.string(from: NSDecimalNumber(decimal: Decimal(summary.balance)/100)) ?? "—") + " ₽"
+            }
+        }
+    }
+    private func stat(_ title:String,_ value:String,_ caption:String,_ icon:String) -> some View {
+        HStack(alignment:.top,spacing:8) {
+            Image(systemName:icon).font(.system(size:15)).foregroundColor(OpenFluxStyle.orange)
+            VStack(alignment:.leading,spacing:3) {
+                Text(title).font(.system(size:11)).foregroundColor(OpenFluxStyle.muted)
+                Text(value).font(.system(size:19)).foregroundColor(Color(red:1,green:0.89,blue:0.77))
+                Text(caption).font(.system(size:10)).foregroundColor(OpenFluxStyle.muted)
+            }
+            Spacer(minLength:0)
+        }.padding(12).frame(maxWidth:.infinity).background(OpenFluxStyle.surface,in:RoundedRectangle(cornerRadius:12))
+            .overlay(RoundedRectangle(cornerRadius:12).stroke(OpenFluxStyle.orange.opacity(0.17)))
     }
 }

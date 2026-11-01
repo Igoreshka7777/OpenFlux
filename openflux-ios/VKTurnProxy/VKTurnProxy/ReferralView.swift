@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-private struct ReferralSummary: Decodable {
+struct ReferralSummary: Decodable {
     let schema: Int
     let currency: String
     let balance: Int64
@@ -25,7 +25,7 @@ private final class ReferralRedirectPolicy: NSObject, URLSessionTaskDelegate {
                     completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
 }
 
-private enum ReferralAPI {
+enum ReferralAPI {
     static let session = URLSession(configuration: .ephemeral, delegate: ReferralRedirectPolicy(), delegateQueue: nil)
     static func fetch(password: String) async throws -> ReferralSummary {
         var request = URLRequest(url: URL(string: "https://open-flux.ru/api/client/referrals")!)

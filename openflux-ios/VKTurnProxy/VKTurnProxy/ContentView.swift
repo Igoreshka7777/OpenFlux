@@ -116,25 +116,14 @@ struct ContentView: View {
                             .foregroundColor(.white)
                         Spacer()
                         OpenFluxSupportButton()
-                        if tunnel.status != .connected {
-                        NavigationLink(destination: SettingsView()) {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 21))
-                                .foregroundColor(openFluxMuted)
-                                .frame(width: 44, height: 44)
-                        }
-                        .accessibilityLabel("Настройки")
-                        }
+
                     }
 
-                    if tunnel.status != .connected {
-                        LiquidNavigation()
-                    }
-                    Spacer(minLength: 16)
+                    Spacer(minLength: 4)
 
                     // Keep active-server observation below the NavigationView host.
                     ActiveServerControls(tunnel: tunnel)
-
+                    if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress { LiquidNavigation() }
                     Spacer(minLength: 12)
 
 
@@ -688,11 +677,9 @@ private struct ActiveServerControls: View {
             .onChange(of: tunnel.errorMessage) { error in
                 if error != nil { buttonIgnited = false }
             }
+            if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress { LiquidStats() }
+            if tunnel.status == .connected { Spacer(minLength: 100) }
             LiquidCabinetButton()
-            if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress {
-                Text("Уровень жидкости — оставшиеся дни, шкала 30 дней")
-                    .font(.caption2).foregroundColor(OpenFluxStyle.muted)
-            }
 
         }
         .frame(maxWidth: .infinity)
