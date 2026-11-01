@@ -73,6 +73,7 @@ struct LiquidPowerControl: View {
     private var access: SubscriptionAccess? { monitor.entries[store.activeServer.csqttPassword]?.status }
     private var fill: Double {
         guard let access = access else { return 0 }
+        guard access.state == "active" else { return 0 }
         guard let days = access.daysRemaining else { return 1 }
         return min(1, max(0, Double(days) / 30))
     }
