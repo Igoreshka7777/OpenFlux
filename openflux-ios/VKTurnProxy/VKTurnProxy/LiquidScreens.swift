@@ -23,10 +23,10 @@ struct LiquidGlass: View, Animatable {
             let shell=context.resolve(Image("LiquidEmpty"))
             let full=CGRect(origin:.zero,size:size)
             context.draw(shell,in:full)
-            let inner=CGRect(x:size.width*0.115,y:size.height*0.115,width:size.width*0.77,height:size.height*0.77)
+            let inner=CGRect(x:size.width*0.14,y:size.height*0.115,width:size.width*0.72,height:size.height*0.72)
             context.clip(to:Path(ellipseIn:inner))
             guard level>0 else {return}
-            let target=size.height*(0.12+0.76*(1-min(1,max(0,level))))
+            let target=size.height*(0.115+0.72*(1-min(1,max(0,level))))
             let amplitude=size.height*0.025*min(1,level*8)
             var fluid=Path();var crest=Path()
             fluid.move(to:CGPoint(x:0,y:size.height))
