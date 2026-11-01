@@ -9,13 +9,37 @@ import UserNotifications
 private let captchaLog = OSLog(subsystem: "org.igoreshka7777.openflux", category: "Captcha")
 
 enum OpenFluxStyle {
-    static let background = Color(red: 0.035, green: 0.035, blue: 0.04)
-    static let surface = Color(red: 0.085, green: 0.078, blue: 0.09)
+    static let background = Color(red: 0.086, green: 0.075, blue: 0.075)
+    static let surface = Color(red: 0.161, green: 0.125, blue: 0.118).opacity(0.88)
     static let border = Color.white.opacity(0.12)
-    static let muted = Color(red: 0.59, green: 0.56, blue: 0.59)
+    static let muted = Color(red: 0.737, green: 0.690, blue: 0.667)
     static let orange = Color(red: 1, green: 0.537, blue: 0.078)
     static let red = Color(red: 0.933, green: 0.161, blue: 0.129)
-    static let accent = LinearGradient(colors: [orange, red], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let accent = LinearGradient(colors: [Color(red: 1, green: 0.404, blue: 0.169), Color(red: 1, green: 0.671, blue: 0.235)], startPoint: .leading, endPoint: .trailing)
+}
+
+struct OpenFluxBackdrop: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                OpenFluxStyle.background
+                RadialGradient(colors: [Color(red: 0.455, green: 0.251, blue: 0.114).opacity(0.8), .clear], center: .topTrailing, startRadius: 0, endRadius: geometry.size.width * 1.3)
+                RadialGradient(colors: [Color(red: 0.294, green: 0.141, blue: 0.153).opacity(0.7), .clear], center: .bottomLeading, startRadius: 0, endRadius: geometry.size.width * 1.5)
+            }
+        }.ignoresSafeArea()
+    }
+}
+
+struct OpenFluxSupportButton: View {
+    var body: some View {
+        Link(destination: URL(string: "https://t.me/Igorekk777")!) {
+            Label("Поддержка", systemImage: "headphones")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Color(red: 0.212, green: 0.137, blue: 0))
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(Color(red: 1, green: 0.812, blue: 0.345), in: RoundedRectangle(cornerRadius: 10))
+        }.accessibilityLabel("Поддержка OpenFlux в Telegram")
+    }
 }
 
 struct OpenFluxCard<Content: View>: View {
@@ -27,8 +51,8 @@ struct OpenFluxCard<Content: View>: View {
         content
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 24))
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(OpenFluxStyle.border, lineWidth: 1))
+            .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(OpenFluxStyle.border, lineWidth: 1))
     }
 }
 
@@ -97,6 +121,7 @@ struct ContentView: View {
                             .tracking(2)
                             .foregroundColor(.white)
                         Spacer()
+                        OpenFluxSupportButton()
                         NavigationLink(destination: SettingsView()) {
                             Image(systemName: "gearshape")
                                 .font(.system(size: 21))
@@ -106,7 +131,19 @@ struct ContentView: View {
                         .accessibilityLabel("Настройки")
                     }
 
-                    Spacer(minLength: 35)
+                    HStack(spacing: 10) {
+                        Text("Главная").foregroundColor(Color(red: 0.157, green: 0.075, blue: 0.02))
+                            .padding(.horizontal, 20).padding(.vertical, 14)
+                            .background(OpenFluxStyle.accent, in: Capsule())
+                            .accessibilityAddTraits(.isSelected)
+                        NavigationLink(destination: SettingsView()) {
+                            Text("Настройки").foregroundColor(.white)
+                                .padding(.horizontal, 20).padding(.vertical, 14)
+                                .background(OpenFluxStyle.surface, in: Capsule())
+                        }
+                        Spacer(minLength: 0)
+                    }.font(.system(size: 16, weight: .regular))
+                    Spacer(minLength: 16)
 
                     // Keep active-server observation below the NavigationView host.
                     ActiveServerControls(tunnel: tunnel)
@@ -123,7 +160,7 @@ struct ContentView: View {
                 .padding(.vertical, 18)
                 .frame(maxWidth: .infinity, minHeight: 620)
             }
-            .background(OpenFluxStyle.background.ignoresSafeArea())
+            .background(OpenFluxBackdrop())
             .navigationBarHidden(true)
             .onAppear {
                 UNUserNotificationCenter.current().getNotificationSettings { settings in
@@ -181,7 +218,7 @@ struct ContentView: View {
     }
 
     private let openFluxOrange = Color(red: 1, green: 0.54, blue: 0.08)
-    private let openFluxMuted = Color(red: 0.59, green: 0.56, blue: 0.59)
+    private let openFluxMuted = Color(red: 0.737, green: 0.690, blue: 0.667)
 }
 
 private struct OpenFluxInitialLinkView: View {
@@ -368,7 +405,7 @@ private struct OpenFluxInitialLinkView: View {
             .padding(.horizontal, 24)
         }
         .foregroundColor(.white)
-        .background(OpenFluxStyle.background.ignoresSafeArea())
+        .background(OpenFluxBackdrop())
         .interactiveDismissDisabled()
         .task { await refreshPrice() }
         .onChange(of: scenePhase) { phase in
@@ -679,7 +716,7 @@ private struct ActiveServerControls: View {
                  ? "Нажмите на круг, чтобы отключить VPN"
                  : "Нажмите на круг, чтобы подключить VPN")
                 .font(.system(size: 13))
-                .foregroundColor(Color(red: 0.59, green: 0.56, blue: 0.59))
+                .foregroundColor(Color(red: 0.737, green: 0.690, blue: 0.667))
                 .multilineTextAlignment(.center)
 
             OpenFluxGetLinkButton()
@@ -1137,15 +1174,15 @@ struct SettingsView: View {
                 LogsView(tunnel: tunnel, embedded: true,
                          onSupportTapped: { showFullScreenSupport = true })
                     .frame(height: 430)
-                    .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 24))
-                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(OpenFluxStyle.border))
+                    .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 20))
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(OpenFluxStyle.border))
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 36)
         }
         .foregroundColor(.white)
         .tint(OpenFluxStyle.orange)
-        .background(OpenFluxStyle.background.ignoresSafeArea())
+        .background(OpenFluxBackdrop())
         .dismissKeyboardOnDrag()
         .navigationTitle("Настройки")
         .navigationBarHidden(true)

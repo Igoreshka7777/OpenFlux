@@ -52,7 +52,7 @@ struct SpeedTestView: View {
             }
         }
         .openFluxEditorBackground()
-        .background(OpenFluxStyle.background.ignoresSafeArea())
+        .background(OpenFluxBackdrop())
         .preferredColorScheme(.dark)
         .tint(OpenFluxStyle.orange)
         .navigationTitle("Скорость")

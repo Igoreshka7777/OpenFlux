@@ -186,7 +186,7 @@ struct ServerEditView: View {
         }
         .foregroundColor(.white)
         .tint(OpenFluxStyle.orange)
-        .background(OpenFluxStyle.background.ignoresSafeArea())
+        .background(OpenFluxBackdrop())
         .dismissKeyboardOnDrag()
         // A csqtt server without a Device ID (a restored backup, an older
         // blob) gets a VISIBLE one here, so what connects is what is shown.

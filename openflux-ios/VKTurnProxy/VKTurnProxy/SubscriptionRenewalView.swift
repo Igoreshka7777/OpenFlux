@@ -201,7 +201,7 @@ struct SubscriptionRenewalView: View {
                     .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 14))
             }.disabled(checking).padding(.horizontal, 16).padding(.bottom, 12)
         }
-        .foregroundColor(.white).background(OpenFluxStyle.background.ignoresSafeArea()).interactiveDismissDisabled()
+        .foregroundColor(.white).background(OpenFluxBackdrop()).interactiveDismissDisabled()
         .fullScreenCover(isPresented: $showPayment) {
             NavigationView {
                 OpenFluxAccessPortal(password: password) { link in
