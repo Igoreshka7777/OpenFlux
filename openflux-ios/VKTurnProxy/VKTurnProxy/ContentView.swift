@@ -107,13 +107,8 @@ struct ContentView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     HStack(spacing: 10) {
-                        Circle()
-                            .fill(AngularGradient(colors: [openFluxOrange, .red, openFluxOrange], center: .center))
-                            .frame(width: 11, height: 11)
-                        Text("OPENFLUX")
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .tracking(2)
-                            .foregroundColor(.white)
+                        (Text("OPEN").foregroundColor(Color(red:1,green:0.89,blue:0.77)) + Text("FLUX").foregroundColor(openFluxOrange))
+                            .font(.system(size: 17, weight: .bold))
                         Spacer()
                         OpenFluxSupportButton()
 
