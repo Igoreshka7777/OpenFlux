@@ -7,25 +7,46 @@ enum LiquidTheme {
     static let text = Color(red:1,green:235/255,blue:213/255)
 }
 
+private enum LiquidTexture {
+    static let image:UIImage? = {
+        guard let source=UIImage(named:"LiquidOrb")?.cgImage else {return nil}
+        let rect=CGRect(x:Double(source.width)*0.22,y:Double(source.height)*0.48,width:Double(source.width)*0.56,height:Double(source.height)*0.30)
+        guard let crop=source.cropping(to:rect) else {return nil}
+        return UIImage(cgImage:crop)
+    }()
+}
 struct LiquidGlass: View, Animatable {
     var level: Double
     var animatableData: Double { get { level } set { level = newValue } }
     var body: some View {
         Canvas { context,size in
-            let image=context.resolve(Image("LiquidOrb"))
+            let shell=context.resolve(Image("LiquidEmpty"))
             let full=CGRect(origin:.zero,size:size)
-            context.draw(image,in:full)
+            context.draw(shell,in:full)
             let inner=CGRect(x:size.width*0.115,y:size.height*0.115,width:size.width*0.77,height:size.height*0.77)
             context.clip(to:Path(ellipseIn:inner))
-            let split=size.height*0.36
+            guard level>0 else {return}
             let target=size.height*(0.12+0.76*(1-min(1,max(0,level))))
-            var upper=context
-            upper.clip(to:Path(CGRect(x:0,y:0,width:size.width,height:target)))
-            upper.draw(image,in:CGRect(x:0,y:0,width:size.width,height:size.height*target/split))
-            var lower=context
-            lower.clip(to:Path(CGRect(x:0,y:target,width:size.width,height:size.height-target)))
-            let scale=(size.height-target)/(size.height-split)
-            lower.draw(image,in:CGRect(x:0,y:target-split*scale,width:size.width,height:size.height*scale))
+            let amplitude=size.height*0.025*min(1,level*8)
+            var fluid=Path();var crest=Path()
+            fluid.move(to:CGPoint(x:0,y:size.height))
+            for step in 0...140 {
+                let x=size.width*CGFloat(step)/140
+                let y=target+sin(Double(step)/140 * .pi*2+3.8)*amplitude
+                let point=CGPoint(x:x,y:y)
+                fluid.addLine(to:point)
+                if step==0 {crest.move(to:point)} else {crest.addLine(to:point)}
+            }
+            fluid.addLine(to:CGPoint(x:size.width,y:size.height));fluid.closeSubpath()
+            context.fill(fluid,with:.radialGradient(Gradient(colors:[Color(red:82/255,green:27/255,blue:0),Color(red:190/255,green:69/255,blue:0),.orange]),center:CGPoint(x:size.width*0.5,y:size.height*0.55),startRadius:0,endRadius:size.width*0.5))
+            if let texture=LiquidTexture.image {
+                var liquid=context;liquid.clip(to:fluid);liquid.opacity=0.7
+                liquid.draw(liquid.resolve(Image(uiImage:texture)),in:full)
+            }
+            context.stroke(crest,with:.color(.orange.opacity(0.35)),lineWidth:10)
+            context.stroke(crest,with:.color(.orange),lineWidth:4)
+            context.stroke(crest,with:.color(Color(red:1,green:0.93,blue:0.67)),lineWidth:1)
+
         }.animation(.easeInOut(duration:1.1),value:level)
     }
 }
