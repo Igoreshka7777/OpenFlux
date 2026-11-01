@@ -9,7 +9,7 @@ import UserNotifications
 private let captchaLog = OSLog(subsystem: "org.igoreshka7777.openflux", category: "Captcha")
 
 enum OpenFluxStyle {
-    static let background = Color(red: 0.086, green: 0.075, blue: 0.075)
+    static let background = Color(red: 0.063, green: 0.043, blue: 0.035)
     static let surface = Color(red: 0.161, green: 0.125, blue: 0.118).opacity(0.88)
     static let border = Color.white.opacity(0.12)
     static let muted = Color(red: 0.737, green: 0.690, blue: 0.667)
@@ -20,13 +20,7 @@ enum OpenFluxStyle {
 
 struct OpenFluxBackdrop: View {
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                OpenFluxStyle.background
-                RadialGradient(colors: [Color(red: 0.455, green: 0.251, blue: 0.114).opacity(0.8), .clear], center: .topTrailing, startRadius: 0, endRadius: geometry.size.width * 1.3)
-                RadialGradient(colors: [Color(red: 0.294, green: 0.141, blue: 0.153).opacity(0.7), .clear], center: .bottomLeading, startRadius: 0, endRadius: geometry.size.width * 1.5)
-            }
-        }.ignoresSafeArea()
+        OpenFluxStyle.background.ignoresSafeArea()
     }
 }
 
@@ -35,9 +29,9 @@ struct OpenFluxSupportButton: View {
         Link(destination: URL(string: "https://t.me/Igorekk777")!) {
             Label("Поддержка", systemImage: "headphones")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Color(red: 0.212, green: 0.137, blue: 0))
+                .foregroundColor(Color(red: 1, green: 0.85, blue: 0.66))
                 .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(Color(red: 1, green: 0.812, blue: 0.345), in: RoundedRectangle(cornerRadius: 10))
+                .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 10))
         }.accessibilityLabel("Поддержка OpenFlux в Telegram")
     }
 }
@@ -122,6 +116,7 @@ struct ContentView: View {
                             .foregroundColor(.white)
                         Spacer()
                         OpenFluxSupportButton()
+                        if tunnel.status != .connected {
                         NavigationLink(destination: SettingsView()) {
                             Image(systemName: "gearshape")
                                 .font(.system(size: 21))
@@ -129,20 +124,12 @@ struct ContentView: View {
                                 .frame(width: 44, height: 44)
                         }
                         .accessibilityLabel("Настройки")
+                        }
                     }
 
-                    HStack(spacing: 10) {
-                        Text("Главная").foregroundColor(Color(red: 0.157, green: 0.075, blue: 0.02))
-                            .padding(.horizontal, 20).padding(.vertical, 14)
-                            .background(OpenFluxStyle.accent, in: Capsule())
-                            .accessibilityAddTraits(.isSelected)
-                        NavigationLink(destination: SettingsView()) {
-                            Text("Настройки").foregroundColor(.white)
-                                .padding(.horizontal, 20).padding(.vertical, 14)
-                                .background(OpenFluxStyle.surface, in: Capsule())
-                        }
-                        Spacer(minLength: 0)
-                    }.font(.system(size: 16, weight: .regular))
+                    if tunnel.status != .connected {
+                        LiquidNavigation()
+                    }
                     Spacer(minLength: 16)
 
                     // Keep active-server observation below the NavigationView host.
@@ -150,11 +137,7 @@ struct ContentView: View {
 
                     Spacer(minLength: 12)
 
-                    VStack(spacing: 14) {
-                        Text("♢  Трафик — через VPN")
-                            .font(.system(size: 12))
-                            .foregroundColor(openFluxMuted)
-                    }
+
                 }
                 .padding(.horizontal, 26)
                 .padding(.vertical, 18)
@@ -687,10 +670,8 @@ private struct ActiveServerControls: View {
                     }
                 }
             }) {
-                OpenFluxHaloButton(isLit: !connectBlocked && (
-                    buttonIgnited || tunnel.preBootstrapInProgress ||
-                    tunnel.status == .connecting || tunnel.status == .reasserting ||
-                    tunnel.status == .connected))
+                LiquidPowerControl(status: connectionStatusText, connected: tunnel.status == .connected)
+
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -707,23 +688,12 @@ private struct ActiveServerControls: View {
             .onChange(of: tunnel.errorMessage) { error in
                 if error != nil { buttonIgnited = false }
             }
-            Text(connectionStatusText.uppercased())
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .tracking(2.4)
-                .foregroundColor(tunnel.status == .connected ? Color(red: 1, green: 0.54, blue: 0.08) : .white)
-
-            Text(buttonAction == .disconnect
-                 ? "Нажмите на круг, чтобы отключить VPN"
-                 : "Нажмите на круг, чтобы подключить VPN")
-                .font(.system(size: 13))
-                .foregroundColor(Color(red: 0.737, green: 0.690, blue: 0.667))
-                .multilineTextAlignment(.center)
-
-            OpenFluxGetLinkButton()
-            if showCommunityCard && !buttonIgnited && !tunnel.preBootstrapInProgress &&
-                (tunnel.status == .disconnected || tunnel.status == .invalid) {
-                OpenFluxCommunityCard().padding(.top, 12)
+            LiquidCabinetButton()
+            if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress {
+                Text("Уровень жидкости — оставшиеся дни, шкала 30 дней")
+                    .font(.caption2).foregroundColor(OpenFluxStyle.muted)
             }
+
         }
         .frame(maxWidth: .infinity)
     }
@@ -1064,6 +1034,7 @@ struct SettingsView: View {
                     Text("Настройки")
                         .font(.system(size: 30, weight: .bold))
                     Spacer()
+                    OpenFluxSupportButton()
                 }
                 .padding(.top, 16)
 
@@ -1171,11 +1142,12 @@ struct SettingsView: View {
                         .font(.system(size: 17, weight: .semibold))
                 }
 
-                LogsView(tunnel: tunnel, embedded: true,
-                         onSupportTapped: { showFullScreenSupport = true })
-                    .frame(height: 430)
-                    .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 20))
-                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(OpenFluxStyle.border))
+                NavigationLink(destination: LiquidJournalView()) {
+                    OpenFluxCard {
+                        HStack { Label("Журнал приложения", systemImage: "doc.text"); Spacer(); Image(systemName: "chevron.right") }
+                    }
+                }.buttonStyle(.plain)
+
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 36)
