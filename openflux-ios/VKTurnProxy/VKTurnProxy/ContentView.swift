@@ -9,11 +9,11 @@ import UserNotifications
 private let captchaLog = OSLog(subsystem: "org.igoreshka7777.openflux", category: "Captcha")
 
 enum OpenFluxStyle {
-    static let background = Color(red: 0.063, green: 0.043, blue: 0.035)
-    static let surface = Color(red: 0.161, green: 0.125, blue: 0.118).opacity(0.88)
-    static let border = Color.white.opacity(0.12)
-    static let muted = Color(red: 0.737, green: 0.690, blue: 0.667)
-    static let orange = Color(red: 1, green: 0.537, blue: 0.078)
+    static let background = Color(red: 16/255, green: 9/255, blue: 6/255)
+    static let surface = Color(red: 32/255, green: 12/255, blue: 3/255)
+    static let border = Color(red: 217/255, green: 90/255, blue: 4/255)
+    static let muted = Color(red: 187/255, green: 169/255, blue: 152/255)
+    static let orange = Color(red: 1, green: 134/255, blue: 28/255)
     static let red = Color(red: 0.933, green: 0.161, blue: 0.129)
     static let accent = LinearGradient(colors: [Color(red: 1, green: 0.404, blue: 0.169), Color(red: 1, green: 0.671, blue: 0.235)], startPoint: .leading, endPoint: .trailing)
 }
@@ -31,7 +31,7 @@ struct OpenFluxSupportButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(red: 1, green: 0.85, blue: 0.66))
                 .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 10))
+                
         }.accessibilityLabel("Поддержка OpenFlux в Telegram")
     }
 }
@@ -185,7 +185,7 @@ struct ContentView: View {
     }
 
     private let openFluxOrange = Color(red: 1, green: 0.54, blue: 0.08)
-    private let openFluxMuted = Color(red: 0.737, green: 0.690, blue: 0.667)
+    private let openFluxMuted = Color(red: 187/255, green: 169/255, blue: 152/255)
 }
 
 private struct OpenFluxInitialLinkView: View {
