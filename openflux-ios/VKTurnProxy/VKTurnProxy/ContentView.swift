@@ -2400,70 +2400,19 @@ struct LogsView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
             }
-            HStack(spacing: 10) {
-                Button("Журнал VPN") { selectedSection = 0 }
-                    .foregroundColor(selectedSection == 0 ? .white : OpenFluxStyle.muted)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(selectedSection == 0 ? OpenFluxStyle.orange : OpenFluxStyle.surface,
-                                in: Capsule())
-                Button("Поддержка") {
-                    if let onSupportTapped {
-                        onSupportTapped()
-                    } else {
-                        selectedSection = 1
-                    }
-                }
-                    .foregroundColor(selectedSection == 1 ? .white : OpenFluxStyle.muted)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(selectedSection == 1 ? OpenFluxStyle.orange : OpenFluxStyle.surface,
-                                in: Capsule())
-            }
-            .font(.system(size: 14, weight: .semibold))
-            .padding(.horizontal, 24)
-            .padding(.vertical, embedded ? 16 : 18)
-            LogTextView(text: logText, autoScroll: autoScroll)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(OpenFluxStyle.border))
-                .padding(.horizontal, 24)
+            LiquidPanel {Toggle("Прокручивать журнал",isOn:$autoScroll).font(.system(size:14))}.padding(.horizontal,20).padding(.vertical,12)
+            LogTextView(text:logText,autoScroll:autoScroll)
+                .clipShape(RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(OpenFluxStyle.border,lineWidth:0.8)).padding(.horizontal,20)
+            HStack(spacing:8) {
+                Button {UIPasteboard.general.string=logText} label: {LiquidPanel{VStack(spacing:5){Image(systemName:"doc.on.doc");Text("Скопировать").font(.system(size:9))}.frame(maxWidth:.infinity)}}
+                Button {showShareSheet=true} label: {LiquidPanel{VStack(spacing:5){Image(systemName:"square.and.arrow.up");Text("Поделиться").font(.system(size:9))}.frame(maxWidth:.infinity)}}
+                Button {SharedLogger.shared.clearLogs();fallbackText="";fallbackFetchedAt = .distantPast;logText=""} label: {LiquidPanel{VStack(spacing:5){Image(systemName:"trash");Text("Очистить").font(.system(size:9))}.frame(maxWidth:.infinity)}}.foregroundColor(.orange)
+            }.buttonStyle(.plain).padding(20)
 
-            Divider()
-
-            HStack {
-                Toggle("Прокрутка", isOn: $autoScroll)
-                    .font(.caption)
-                    .toggleStyle(.switch)
-                    .fixedSize()
-
-                Spacer()
-
-                Button(action: {
-                    SharedLogger.shared.clearLogs()
-                    // Wipe the fallback cache too — otherwise after
-                    // clearing the on-disk log the next loadLogs() tick
-                    // would still show the stale cached fallback content
-                    // until the TTL elapses, which looks like Clear
-                    // didn't work.
-                    fallbackText = ""
-                    fallbackFetchedAt = .distantPast
-                    logText = ""
-                }) {
-                    Label("Очистить", systemImage: "trash")
-                        .font(.caption)
-                }
-
-                Button(action: { showShareSheet = true }) {
-                    Label("Поделиться", systemImage: "square.and.arrow.up")
-                        .font(.caption)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
         }
         .foregroundColor(.white)
         .tint(OpenFluxStyle.orange)
-        .background(embedded ? OpenFluxStyle.surface : OpenFluxStyle.background)
+        .background(OpenFluxStyle.background)
         .navigationTitle(embedded ? "Настройки" : "Журнал и поддержка")
         .onChange(of: selectedSection) { value in
             if value == 1 { showSupportChat = true }
