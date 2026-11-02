@@ -93,13 +93,6 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             build 2>&1 | tee build_output/xcodebuild.log
-      - name: Render halo on iPhone simulator
-        run: bash tools/glowpreview/render.sh
-      - name: Upload halo screenshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenFlux-iOS-489-preview
-          path: openflux-ios/tools/glowpreview/glow-489.png
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
@@ -127,3 +120,13 @@ jobs:
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
+      - name: Render halo on iPhone simulator
+        timeout-minutes: 4
+        continue-on-error: true
+        run: bash tools/glowpreview/render.sh
+      - name: Upload halo screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenFlux-iOS-489-preview
+          if-no-files-found: warn
+          path: openflux-ios/tools/glowpreview/glow-489.png

@@ -2,7 +2,7 @@
 set -euo pipefail
 cd tools/glowpreview
 xcodegen generate
-xcodebuild -project GlowPreview.xcodeproj -scheme GlowPreview -sdk iphonesimulator -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > build.log 2>&1
+xcodebuild -project GlowPreview.xcodeproj -scheme GlowPreview -sdk iphonesimulator -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
 DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x["name"].startswith("iPhone")))')
 xcrun simctl boot "$DEVICE" || true
 xcrun simctl bootstatus "$DEVICE" -b
