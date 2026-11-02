@@ -9,31 +9,13 @@ import UserNotifications
 private let captchaLog = OSLog(subsystem: "org.igoreshka7777.openflux", category: "Captcha")
 
 enum OpenFluxStyle {
-    static let background = Color(red: 16/255, green: 9/255, blue: 6/255)
-    static let surface = Color(red: 32/255, green: 12/255, blue: 3/255)
-    static let border = Color(red: 217/255, green: 90/255, blue: 4/255)
-    static let muted = Color(red: 187/255, green: 169/255, blue: 152/255)
-    static let orange = Color(red: 1, green: 134/255, blue: 28/255)
+    static let background = Color(red: 0.035, green: 0.035, blue: 0.04)
+    static let surface = Color(red: 0.085, green: 0.078, blue: 0.09)
+    static let border = Color.white.opacity(0.12)
+    static let muted = Color(red: 0.59, green: 0.56, blue: 0.59)
+    static let orange = Color(red: 1, green: 0.537, blue: 0.078)
     static let red = Color(red: 0.933, green: 0.161, blue: 0.129)
-    static let accent = LinearGradient(colors: [Color(red: 1, green: 0.404, blue: 0.169), Color(red: 1, green: 0.671, blue: 0.235)], startPoint: .leading, endPoint: .trailing)
-}
-
-struct OpenFluxBackdrop: View {
-    var body: some View {
-        OpenFluxStyle.background.ignoresSafeArea()
-    }
-}
-
-struct OpenFluxSupportButton: View {
-    var body: some View {
-        Link(destination: URL(string: "https://t.me/Igorekk777")!) {
-            Label("Поддержка", systemImage: "headphones")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Color(red: 1, green: 0.85, blue: 0.66))
-                .padding(.horizontal, 12).padding(.vertical, 10)
-                
-        }.accessibilityLabel("Поддержка OpenFlux в Telegram")
-    }
+    static let accent = LinearGradient(colors: [orange, red], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
 struct OpenFluxCard<Content: View>: View {
@@ -45,8 +27,8 @@ struct OpenFluxCard<Content: View>: View {
         content
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(OpenFluxStyle.border, lineWidth: 1))
+            .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 24))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(OpenFluxStyle.border, lineWidth: 1))
     }
 }
 
@@ -81,7 +63,6 @@ extension View {
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager.shared
     @State private var showInitialLink = false
-    @State private var navigationIdentity = UUID()
 
 
     // 🚨 THIS VIEW HOSTS THE `NavigationView`, SO IT SUBSCRIBES TO NOTHING BUT
@@ -106,33 +87,43 @@ struct ContentView: View {
             // user can scroll instead of losing access to them. On
             // larger screens the content fits without scrolling.
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: 24) {
                     HStack(spacing: 10) {
-                        (Text("OPEN").foregroundColor(Color(red:1,green:0.89,blue:0.77)) + Text("FLUX").foregroundColor(openFluxOrange))
-                            .font(.system(size: 20, weight: .bold))
+                        Circle()
+                            .fill(AngularGradient(colors: [openFluxOrange, .red, openFluxOrange], center: .center))
+                            .frame(width: 11, height: 11)
+                        Text("OPENFLUX")
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .tracking(2)
+                            .foregroundColor(.white)
                         Spacer()
-                        OpenFluxSupportButton()
-
+                        NavigationLink(destination: SettingsView()) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 21))
+                                .foregroundColor(openFluxMuted)
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Настройки")
                     }
 
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 35)
 
                     // Keep active-server observation below the NavigationView host.
                     ActiveServerControls(tunnel: tunnel)
+
                     Spacer(minLength: 12)
 
-
+                    VStack(spacing: 14) {
+                        Text("♢  Трафик — через VPN")
+                            .font(.system(size: 12))
+                            .foregroundColor(openFluxMuted)
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, minHeight: 620)
             }
-            .safeAreaInset(edge:.bottom) {
-                if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress {
-                    LiquidNavigation().padding(.horizontal,12).background(LiquidTheme.card)
-                }
-            }
-            .background(OpenFluxBackdrop())
+            .background(OpenFluxStyle.background.ignoresSafeArea())
             .navigationBarHidden(true)
             .onAppear {
                 UNUserNotificationCenter.current().getNotificationSettings { settings in
@@ -187,14 +178,10 @@ struct ContentView: View {
             .background(ConnectionLinkImporter())
             .background(SubscriptionPresentationHost())
         }
-        .id(navigationIdentity)
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenFluxHomeRequested"))) { _ in
-            navigationIdentity = UUID()
-        }
     }
 
     private let openFluxOrange = Color(red: 1, green: 0.54, blue: 0.08)
-    private let openFluxMuted = Color(red: 187/255, green: 169/255, blue: 152/255)
+    private let openFluxMuted = Color(red: 0.59, green: 0.56, blue: 0.59)
 }
 
 private struct OpenFluxInitialLinkView: View {
@@ -381,7 +368,7 @@ private struct OpenFluxInitialLinkView: View {
             .padding(.horizontal, 24)
         }
         .foregroundColor(.white)
-        .background(OpenFluxBackdrop())
+        .background(OpenFluxStyle.background.ignoresSafeArea())
         .interactiveDismissDisabled()
         .task { await refreshPrice() }
         .onChange(of: scenePhase) { phase in
@@ -663,10 +650,13 @@ private struct ActiveServerControls: View {
                     }
                 }
             }) {
-                LiquidPowerControl(status: connectionStatusText, connected: tunnel.status == .connected)
-
+                OpenFluxHaloButton(isLit: !connectBlocked && (
+                    buttonIgnited || tunnel.preBootstrapInProgress ||
+                    tunnel.status == .connecting || tunnel.status == .reasserting ||
+                    tunnel.status == .connected))
             }
-            .padding(.top, 4)
+            .padding(.horizontal)
+            .padding(.top, 8)
             // Block Connect when a required field for the active mode is
             // empty/invalid (e.g. WRAP-A without a password → Go disables
             // WRAP-A → broken direct fallback; or a malformed peerAddress /
@@ -680,10 +670,18 @@ private struct ActiveServerControls: View {
             .onChange(of: tunnel.errorMessage) { error in
                 if error != nil { buttonIgnited = false }
             }
-            if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress { LiquidStats() }
-            if tunnel.status == .connected { Spacer(minLength: 100) }
-            LiquidCabinetButton()
+            Text(buttonAction == .disconnect
+                 ? "Нажмите на круг, чтобы отключить VPN"
+                 : "Нажмите на круг, чтобы подключить VPN")
+                .font(.system(size: 13))
+                .foregroundColor(Color(red: 0.59, green: 0.56, blue: 0.59))
+                .multilineTextAlignment(.center)
 
+            OpenFluxGetLinkButton()
+            if showCommunityCard && !buttonIgnited && !tunnel.preBootstrapInProgress &&
+                (tunnel.status == .disconnected || tunnel.status == .invalid) {
+                OpenFluxCommunityCard().padding(.top, 12)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -732,60 +730,16 @@ private struct OpenFluxGetLinkButton: View {
 
 private struct OpenFluxHaloButton: View {
     let isLit: Bool
-    @State private var phase = 0.0
-
-    private let orange = Color(red: 1, green: 0.54, blue: 0.08)
-    private let red = Color(red: 0.93, green: 0.16, blue: 0.13)
-
+    @ObservedObject private var store=ServerStore.shared
+    @ObservedObject private var monitor=SubscriptionMonitor.shared
+    @ObservedObject private var tunnel=TunnelManager.shared
+    private var access:SubscriptionAccess? {monitor.entries[store.activeServer.csqttPassword]?.status}
+    private var level:Double {guard let a=access,a.state=="active" else{return 0};return a.daysRemaining.map{min(1,max(0,Double($0)/30))} ?? 1}
+    private var days:String {guard let a=access else{return "Проверяем срок"};guard a.state=="active" else{return "Нет доступа"};return a.daysRemaining.map{"\($0) дн."} ?? "Без лимита"}
     var body: some View {
-        ZStack {
-            if isLit {
-                let pulse = 0.68 + (sin(phase) + 1) * 0.16
-                Circle()
-                    .stroke(orange.opacity(0.38 * pulse), lineWidth: 26)
-                    .frame(width: 156, height: 156)
-                    .blur(radius: 18)
-                Circle()
-                    .stroke(red.opacity(0.45 * pulse), lineWidth: 13)
-                    .frame(width: 156, height: 156)
-                    .blur(radius: 10)
-            }
-            Circle()
-                .fill(RadialGradient(
-                    colors: isLit ? [Color(red: 0.33, green: 0.13, blue: 0.04),
-                                     Color(red: 0.035, green: 0.027, blue: 0.03)]
-                                  : [Color(red: 0.035, green: 0.027, blue: 0.03)],
-                    center: .center, startRadius: 0, endRadius: 72))
-                .frame(width: 143, height: 143)
-            if isLit {
-                Circle()
-                    .stroke(AngularGradient(
-                        colors: [orange, Color(red: 1, green: 0.38, blue: 0.05), red, orange],
-                        center: .center), lineWidth: 5)
-                    .frame(width: 153, height: 153)
-            } else {
-                Circle()
-                    .stroke(Color.gray.opacity(0.42), lineWidth: 2)
-                    .frame(width: 153, height: 153)
-            }
-            Image(systemName: "power")
-                .font(.system(size: 32, weight: .ultraLight))
-                .foregroundColor(isLit ? Color(red: 1, green: 0.85, blue: 0.53) : Color.gray)
-        }
-        .frame(width: 270, height: 270)
-        .contentShape(Circle())
-        .accessibilityLabel(isLit ? "Отключить VPN" : "Подключить VPN")
-        .onAppear { if isLit { ignite() } }
-        .onChange(of: isLit) { lit in
-            if lit { ignite() } else { phase = 0 }
-        }
-    }
-
-    private func ignite() {
-        phase = 0
-        withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
-            phase = 2 * Double.pi
-        }
+        SubscriptionGlowControl(level:level,status:tunnel.status == .connected ? "Подключено" : (isLit ? "Подключение" : "Подключить"),days:days)
+            .accessibilityLabel(isLit ? "Отключить VPN" : "Подключить VPN")
+            .task(id:store.activeServer.csqttPassword) {_ = await monitor.refresh(password:store.activeServer.csqttPassword)}
     }
 }
 
@@ -1024,7 +978,6 @@ struct SettingsView: View {
                     Text("Настройки")
                         .font(.system(size: 30, weight: .bold))
                     Spacer()
-                    OpenFluxSupportButton()
                 }
                 .padding(.top, 16)
 
@@ -1132,19 +1085,18 @@ struct SettingsView: View {
                         .font(.system(size: 17, weight: .semibold))
                 }
 
-                NavigationLink(destination: LiquidJournalView()) {
-                    OpenFluxCard {
-                        HStack { Label("Журнал приложения", systemImage: "doc.text"); Spacer(); Image(systemName: "chevron.right") }
-                    }
-                }.buttonStyle(.plain)
-
+                LogsView(tunnel: tunnel, embedded: true,
+                         onSupportTapped: { showFullScreenSupport = true })
+                    .frame(height: 430)
+                    .background(OpenFluxStyle.surface, in: RoundedRectangle(cornerRadius: 24))
+                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(OpenFluxStyle.border))
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 36)
         }
         .foregroundColor(.white)
         .tint(OpenFluxStyle.orange)
-        .background(OpenFluxBackdrop())
+        .background(OpenFluxStyle.background.ignoresSafeArea())
         .dismissKeyboardOnDrag()
         .navigationTitle("Настройки")
         .navigationBarHidden(true)
@@ -2408,19 +2360,70 @@ struct LogsView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
             }
-            LiquidPanel {Toggle("Прокручивать журнал",isOn:$autoScroll).font(.system(size:14))}.padding(.horizontal,20).padding(.vertical,12)
-            LogTextView(text:logText,autoScroll:autoScroll)
-                .clipShape(RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(OpenFluxStyle.border,lineWidth:0.8)).padding(.horizontal,20)
-            HStack(spacing:8) {
-                Button {UIPasteboard.general.string=logText} label: {LiquidPanel{VStack(spacing:5){Image(systemName:"doc.on.doc");Text("Скопировать").font(.system(size:9))}.frame(maxWidth:.infinity)}}
-                Button {showShareSheet=true} label: {LiquidPanel{VStack(spacing:5){Image(systemName:"square.and.arrow.up");Text("Поделиться").font(.system(size:9))}.frame(maxWidth:.infinity)}}
-                Button {SharedLogger.shared.clearLogs();fallbackText="";fallbackFetchedAt = .distantPast;logText=""} label: {LiquidPanel{VStack(spacing:5){Image(systemName:"trash");Text("Очистить").font(.system(size:9))}.frame(maxWidth:.infinity)}}.foregroundColor(.orange)
-            }.buttonStyle(.plain).padding(20)
+            HStack(spacing: 10) {
+                Button("Журнал VPN") { selectedSection = 0 }
+                    .foregroundColor(selectedSection == 0 ? .white : OpenFluxStyle.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(selectedSection == 0 ? OpenFluxStyle.orange : OpenFluxStyle.surface,
+                                in: Capsule())
+                Button("Поддержка") {
+                    if let onSupportTapped {
+                        onSupportTapped()
+                    } else {
+                        selectedSection = 1
+                    }
+                }
+                    .foregroundColor(selectedSection == 1 ? .white : OpenFluxStyle.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(selectedSection == 1 ? OpenFluxStyle.orange : OpenFluxStyle.surface,
+                                in: Capsule())
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .padding(.horizontal, 24)
+            .padding(.vertical, embedded ? 16 : 18)
+            LogTextView(text: logText, autoScroll: autoScroll)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(OpenFluxStyle.border))
+                .padding(.horizontal, 24)
 
+            Divider()
+
+            HStack {
+                Toggle("Прокрутка", isOn: $autoScroll)
+                    .font(.caption)
+                    .toggleStyle(.switch)
+                    .fixedSize()
+
+                Spacer()
+
+                Button(action: {
+                    SharedLogger.shared.clearLogs()
+                    // Wipe the fallback cache too — otherwise after
+                    // clearing the on-disk log the next loadLogs() tick
+                    // would still show the stale cached fallback content
+                    // until the TTL elapses, which looks like Clear
+                    // didn't work.
+                    fallbackText = ""
+                    fallbackFetchedAt = .distantPast
+                    logText = ""
+                }) {
+                    Label("Очистить", systemImage: "trash")
+                        .font(.caption)
+                }
+
+                Button(action: { showShareSheet = true }) {
+                    Label("Поделиться", systemImage: "square.and.arrow.up")
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
         }
         .foregroundColor(.white)
         .tint(OpenFluxStyle.orange)
-        .background(OpenFluxStyle.background)
+        .background(embedded ? OpenFluxStyle.surface : OpenFluxStyle.background)
         .navigationTitle(embedded ? "Настройки" : "Журнал и поддержка")
         .onChange(of: selectedSection) { value in
             if value == 1 { showSupportChat = true }
