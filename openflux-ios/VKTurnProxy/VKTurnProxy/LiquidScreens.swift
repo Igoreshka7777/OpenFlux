@@ -26,7 +26,11 @@ struct LiquidGlass: View, Animatable {
         Canvas { context,size in
             let shell=context.resolve(Image("LiquidEmpty"))
             let full=CGRect(origin:.zero,size:size)
-            var glass=context;glass.blendMode = .screen;glass.draw(shell,in:full)
+            var glass=context
+            glass.clipToLayer {mask in
+                mask.fill(Path(full),with:.radialGradient(Gradient(stops:[.init(color:.white,location:0),.init(color:.white,location:0.82),.init(color:.clear,location:1)]),center:CGPoint(x:size.width*0.5,y:size.height*0.475),startRadius:0,endRadius:size.width*0.5))
+            }
+            glass.draw(shell,in:full)
             let inner=CGRect(x:size.width*0.14,y:size.height*0.115,width:size.width*0.72,height:size.height*0.72)
             context.clip(to:Path(ellipseIn:inner))
             guard level>0 else {return}
@@ -42,9 +46,9 @@ struct LiquidGlass: View, Animatable {
                 if step==0 {crest.move(to:point)} else {crest.addLine(to:point)}
             }
             fluid.addLine(to:CGPoint(x:size.width,y:size.height));fluid.closeSubpath()
-            context.fill(fluid,with:.radialGradient(Gradient(colors:[Color(red:122/255,green:39/255,blue:0),Color(red:233/255,green:103/255,blue:0),Color(red:1,green:178/255,blue:10/255)]),center:CGPoint(x:size.width*0.5,y:size.height*0.55),startRadius:0,endRadius:size.width*0.5))
+            context.fill(fluid,with:.radialGradient(Gradient(colors:[Color(red:64/255,green:16/255,blue:0),Color(red:128/255,green:42/255,blue:0),Color(red:234/255,green:101/255,blue:0),Color(red:1,green:193/255,blue:40/255)]),center:CGPoint(x:size.width*0.5,y:size.height*0.64),startRadius:0,endRadius:size.width*0.42))
             if let texture=LiquidTexture.image {
-                var liquid=context;liquid.clip(to:fluid);liquid.opacity=0.6;liquid.blendMode = .screen
+                var liquid=context;liquid.clip(to:fluid);liquid.opacity=0.28;liquid.blendMode = .screen
                 liquid.draw(liquid.resolve(Image(uiImage:texture)),in:full)
             }
             var ribbon=crest;var second=Path()
@@ -171,7 +175,7 @@ struct LiquidMiniOrb: View {
             LiquidGlass(level:fill)
             VStack(spacing:5) {
                 Text(access == nil ? "—" : "\(Int(fill*100))%").font(.system(size:25,weight:.semibold))
-                Text(access?.daysRemaining.map{"\($0) дн."} ?? "Срок уточняется").font(.system(size:13))
+                Text(access?.daysRemaining.map{"\($0) дн."} ?? "— дней").font(.system(size:13))
             }.foregroundColor(LiquidTheme.text).offset(y:12)
         }.frame(width:168,height:168)
             .task(id:store.activeServer.csqttPassword){_ = await monitor.refresh(password:store.activeServer.csqttPassword)}
