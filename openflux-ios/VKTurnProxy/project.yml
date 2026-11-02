@@ -19,7 +19,7 @@ targets:
     # Switched from GENERATE_INFOPLIST_FILE: YES to an explicit
     # info.properties block in xcodegen. Reason: CFBundleURLTypes (an
     # array-of-dicts for the vkturnproxy:// 1-Click import scheme) has
-    # no INFOPLIST_KEY_* equivalent — Apple's flat KEY_VALUE form only
+    # no INFOPLIST_KEY_* equivalent вЂ” Apple's flat KEY_VALUE form only
     # covers scalars. The translations from the old INFOPLIST_KEY_*
     # entries to native plist values are 1:1 below; CFBundleVersion /
     # CFBundleShortVersionString are interpolated explicitly via
@@ -31,7 +31,7 @@ targets:
         CFBundleDisplayName: "OpenFlux"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        # Declare that we don't use non-exempt encryption — only standard
+        # Declare that we don't use non-exempt encryption вЂ” only standard
         # crypto exposed through Apple system APIs (CommonCrypto,
         # Security.framework, Network.framework DTLS/TLS), all exempt
         # under U.S. export Category 5 Part 2. Without this, App Store
@@ -41,7 +41,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         # Required before ActivityKit will start a Live Activity at all
         # (GitHub issue #64). Without it Activity.request throws and the
-        # island never appears — with no other symptom.
+        # island never appears вЂ” with no other symptom.
         NSSupportsLiveActivities: true
         # UIApplicationSceneManifest_Generation: YES used to produce a
         # dict with UIApplicationSupportsMultipleScenes=false; same
@@ -73,9 +73,9 @@ targets:
             CFBundleURLSchemes:
               - vkturnproxy
               # amurcanov proxy-turn-vk-android compat. His server hands out
-              # wdtt://<ip>:<dtls>:<wg>:<peer>:<password>:<hash[,hash…]> links.
+              # wdtt://<ip>:<dtls>:<wg>:<peer>:<password>:<hash[,hashвЂ¦]> links.
               # His own Android app does NOT register the scheme (paste-only),
-              # so we become the sole handler — no collision. Parsed by
+              # so we become the sole handler вЂ” no collision. Parsed by
               # BackupManager.parseWdttLink into SRTP-WRAP-A mode.
               - wdtt
               # samosvalishe free-turn-proxy compat. freeturn://<base64url(json)>
@@ -91,11 +91,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.igoreshka7777.openflux
         CODE_SIGN_ENTITLEMENTS: VKTurnProxy/VKTurnProxy.entitlements
         MARKETING_VERSION: "2.0"
-        CURRENT_PROJECT_VERSION: 485
+        CURRENT_PROJECT_VERSION: 486
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Pre-bootstrap captcha probe in connect() calls Go-side
         # wgProbeVKCreds directly from main-app process (the only context
-        # where we can show a WebView while still having network — see
+        # where we can show a WebView while still having network вЂ” see
         # TunnelManager.swift). That requires the same xcframework +
         # bridging header that the extension target uses.
         SWIFT_OBJC_BRIDGING_HEADER: VKTurnProxy/BridgeHeader.h
@@ -108,7 +108,7 @@ targets:
       - target: PacketTunnel
         embed: true
       # Live Activity / widget host (GitHub issue #64). Embedded into PlugIns
-      # like the tunnel extension. Nothing in the app links against it — the
+      # like the tunnel extension. Nothing in the app links against it вЂ” the
       # only shared code is VPNActivityAttributes.swift, compiled into both.
       - target: VKTurnProxyWidget
         embed: true
@@ -132,31 +132,31 @@ targets:
     sources:
       - path: PacketTunnel
       # SharedLogger.swift lives under VKTurnProxy/ but is compiled into
-      # both targets — main-app and extension write to the same App Group
+      # both targets вЂ” main-app and extension write to the same App Group
       # log file via this helper.
       - path: VKTurnProxy/SharedLogger.swift
       # OSLogReader.swift is the in-process os_log fallback. Compiled
       # into the extension so handleAppMessage("get_logs") can read its
-      # own ring buffer and return entries to the main app — used as a
+      # own ring buffer and return entries to the main app вЂ” used as a
       # fallback when the App Group container is unavailable and
       # SharedLogger silently no-ops.
       - path: VKTurnProxy/OSLogReader.swift
-      # VKCookieStore.swift — Keychain-backed VKAuth cookie store, compiled into
+      # VKCookieStore.swift вЂ” Keychain-backed VKAuth cookie store, compiled into
       # the extension too so it can read the logged-in cookie at startTunnel
       # (shared keychain-access-group, same App Group as the rest).
       - path: VKTurnProxy/VKCookieStore.swift
-      # DirectRouteSync.swift — the desired/applied/in-flight machine behind
+      # DirectRouteSync.swift вЂ” the desired/applied/in-flight machine behind
       # DIRECT mode. It lives under VKTurnProxy/ rather than PacketTunnel/ for
       # ONE reason: the extension has no test target, and tools/swiftcheck
       # compiles the REAL source standalone. A copy under PacketTunnel/ would be
       # a second file to keep in step with the one the harness checks.
       - path: VKTurnProxy/DirectRouteSync.swift
-      # AppEntitlements.swift — reads this process's own code signature so the
+      # AppEntitlements.swift вЂ” reads this process's own code signature so the
       # App-Group failure can name the team that signed the build. Compiled into
       # the extension too: it has its OWN signature, and app/extension can
       # disagree, which is itself a finding worth logging.
       - path: VKTurnProxy/AppEntitlements.swift
-      # TunnelMTU.swift — the MTU bounds. The extension clamps again at the
+      # TunnelMTU.swift вЂ” the MTU bounds. The extension clamps again at the
       # sink: providerConfiguration carries whatever ended up in UserDefaults,
       # and an imported backup is not a trusted source.
       - path: VKTurnProxy/TunnelMTU.swift
@@ -177,7 +177,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.igoreshka7777.openflux.tunnel
         CODE_SIGN_ENTITLEMENTS: PacketTunnel/PacketTunnel.entitlements
         MARKETING_VERSION: "2.0"
-        CURRENT_PROJECT_VERSION: 485
+        CURRENT_PROJECT_VERSION: 486
         SKIP_INSTALL: YES
         SWIFT_OBJC_BRIDGING_HEADER: PacketTunnel/BridgeHeader.h
         OTHER_LDFLAGS:
@@ -189,10 +189,10 @@ targets:
       - framework: ../WireGuardBridge/build/WireGuardTURN.xcframework
       - sdk: NetworkExtension.framework
 
-  # ─── Live Activity / widget extension (GitHub issue #64) ──────────────────
+  # в”Ђв”Ђв”Ђ Live Activity / widget extension (GitHub issue #64) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   # Stage 1 is display-only: connection state + active server name on the Lock
   # Screen and in the Dynamic Island. Deliberately NOT part of the app target's
-  # iOS 15.0 floor — ActivityKit with staleDate is 16.2+, so this target overrides the
+  # iOS 15.0 floor вЂ” ActivityKit with staleDate is 16.2+, so this target overrides the
   # deployment target and the app keeps supporting older devices without it.
   # No App Group and no entitlements file: the system delivers ContentState to
   # this process, so nothing here reads shared storage. That is also why this
@@ -224,7 +224,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.igoreshka7777.openflux.widget
         MARKETING_VERSION: "2.0"
-        CURRENT_PROJECT_VERSION: 485
+        CURRENT_PROJECT_VERSION: 486
         SKIP_INSTALL: YES
     dependencies:
       - sdk: WidgetKit.framework

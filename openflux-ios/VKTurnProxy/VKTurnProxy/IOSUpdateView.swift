@@ -59,6 +59,6 @@ struct IOSUpdateView: View {
                 }.disabled(checking).foregroundColor(OpenFluxStyle.orange)
                 Link("Связаться с администратором ↗", destination: URL(string: "https://t.me/Igorekk777")!).foregroundColor(OpenFluxStyle.muted)
             }.padding(24)
-        }.foregroundColor(.white).background(OpenFluxBackdrop()).interactiveDismissDisabled(monitor.required || openingInstall)
+        }.foregroundColor(.white).background(OpenFluxStyle.background.ignoresSafeArea()).interactiveDismissDisabled(monitor.required || openingInstall)
     }
 }

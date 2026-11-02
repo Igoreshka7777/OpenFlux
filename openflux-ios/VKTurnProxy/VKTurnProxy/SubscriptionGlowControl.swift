@@ -8,13 +8,13 @@ struct SubscriptionGlowControl: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var displayLevel:Double=0
     var body:some View {
-        TimelineView(.animation(minimumInterval:1.0/30,paused:reduceMotion || scenePhase != .active || displayLevel<=0)) { timeline in
+        TimelineView(.animation(minimumInterval:1.0/60,paused:reduceMotion || scenePhase != .active || displayLevel<=0)) { timeline in
             let phase=timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy:5.5)/5.5 * .pi*2
-            let pulse=reduceMotion ? 0.75 : 0.775-0.225*cos(phase)
+            let pulse=reduceMotion ? 0.9 : 0.89-0.11*cos(phase)
             ZStack {
                 GlowCanvas(level:displayLevel,pulse:pulse)
                 VStack(spacing:8) {
-                    Image(systemName:"power").font(.system(size:40,weight:.light)).foregroundColor(Color(red:1,green:0.79,blue:0.54))
+                    Image(systemName:"power").font(.system(size:40,weight:.light)).foregroundColor(Color(red:1,green:0.72,blue:0.40))
                         .padding(.bottom,4)
                     Text(status).font(.system(size:17,weight:.medium))
                     Text(days).font(.system(size:14)).foregroundColor(Color(red:0.91,green:0.8,blue:0.71))
@@ -34,13 +34,19 @@ private struct GlowCanvas:View,Animatable {
             let r=min(size.width,size.height)*0.325
             let center=CGPoint(x:size.width/2,y:size.height/2)
             if level>0 {
-                let outer=r+min(size.width,size.height)*(0.025+0.14*level)
+                let outer=r+min(size.width,size.height)*(0.025+0.145*level)
+                let edge=r/outer
+                let stops:[Gradient.Stop]=(0...33).map {i in
+                    let t=i==0 ? 0 : Double(i-1)/32
+                    let alpha=i==33 ? 0 : 0.824*level*pulse*exp(-5*t*t)
+                    return .init(color:Color(red:1,green:100/255,blue:18/255).opacity(alpha),location:i==0 ? 0 : edge+(1-edge)*t)
+                }
                 let halo=Path(ellipseIn:CGRect(x:center.x-outer,y:center.y-outer,width:outer*2,height:outer*2))
-                context.fill(halo,with:.radialGradient(Gradient(stops:[.init(color:.clear,location:0),.init(color:.clear,location:0.62),.init(color:Color(red:1,green:0.54,blue:0.21).opacity(0.45*level*pulse),location:0.72),.init(color:Color(red:1,green:0.40,blue:0.10).opacity(0.23*level*pulse),location:0.83),.init(color:.clear,location:1)]),center:center,startRadius:0,endRadius:outer))
+                context.fill(halo,with:.radialGradient(Gradient(stops:stops),center:center,startRadius:0,endRadius:outer))
             }
             let circle=Path(ellipseIn:CGRect(x:center.x-r,y:center.y-r,width:r*2,height:r*2))
-            context.fill(circle,with:.radialGradient(Gradient(colors:[Color(red:0.114,green:0.051,blue:0.031),Color(red:0.043,green:0.035,blue:0.031)]),center:center,startRadius:0,endRadius:r))
-            context.stroke(circle,with:.linearGradient(Gradient(colors:[Color(red:1,green:0.82,blue:0.52),Color(red:1,green:0.46,blue:0.15)]),startPoint:.zero,endPoint:CGPoint(x:size.width,y:size.height)),lineWidth:1.7)
+            context.fill(circle,with:.linearGradient(Gradient(colors:[Color(red:37/255,green:13/255,blue:4/255),Color(red:13/255,green:8/255,blue:5/255)]),startPoint:.zero,endPoint:CGPoint(x:0,y:size.height)))
+            context.stroke(circle,with:.linearGradient(Gradient(colors:[Color(red:1,green:178/255,blue:77/255),Color(red:1,green:121/255,blue:22/255)]),startPoint:.zero,endPoint:CGPoint(x:size.width,y:size.height)),lineWidth:1.6)
         }
     }
 }

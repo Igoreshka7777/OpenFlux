@@ -167,7 +167,7 @@ struct SupportChatView: View {
         }
         .padding(.horizontal, 24)
         .foregroundColor(.white)
-        .background(OpenFluxBackdrop())
+        .background(OpenFluxStyle.background.ignoresSafeArea())
         .onAppear { model.start(password: password) }
         .onChange(of: password) { newPassword in
             model.stop()

@@ -114,9 +114,6 @@ struct ContentView: View {
                     Spacer(minLength: 12)
 
                     VStack(spacing: 14) {
-                        Text("♢  Трафик — через VPN")
-                            .font(.system(size: 12))
-                            .foregroundColor(openFluxMuted)
                     }
                 }
                 .padding(.horizontal, 26)

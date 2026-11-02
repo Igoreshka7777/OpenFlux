@@ -152,7 +152,7 @@ struct AdvancedView: View {
         }
         .foregroundColor(.white)
         .tint(OpenFluxStyle.orange)
-        .background(OpenFluxBackdrop())
+        .background(OpenFluxStyle.background.ignoresSafeArea())
         .navigationTitle("Дополнительно")
     }
 }
