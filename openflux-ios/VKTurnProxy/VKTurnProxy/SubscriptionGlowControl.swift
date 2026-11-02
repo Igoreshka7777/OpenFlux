@@ -31,7 +31,7 @@ private struct GlowCanvas:View,Animatable {
     var level:Double
     var pulse:Double
     var rim:Double
-    var animatableData:Double {get{level} set{level=newValue}}
+    var animatableData:AnimatablePair<Double,Double> {get{AnimatablePair(level,rim)} set{level=newValue.first;rim=newValue.second}}
     var body:some View {
         Canvas {context,size in
             let r=min(size.width,size.height)*0.325
