@@ -35,28 +35,22 @@ struct LiquidSection: View {
             VStack(alignment: .leading, spacing: 22) {
                 HStack { Text(kind).font(.largeTitle); Spacer(); OpenFluxSupportButton() }
                 if kind == "Подписка" {
-                    SubscriptionSettingsCard(password: store.activeServer.csqttPassword)
+                    LiquidSubscriptionView()
                     LiquidCabinetButton()
                 } else if kind == "Рефералы" {
                     LiquidReferralsView(password: store.activeServer.csqttPassword)
                 } else {
-                    OpenFluxCard {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("OpenFlux для Android и iPhone").font(.title2)
-                            Text("Установка приложения и управление устройствами доступны на сайте.").foregroundColor(OpenFluxStyle.muted)
-                            LiquidCabinetButton()
-                        }
-                    }
-                    NavigationLink("Ссылка подключения →", destination: LiquidSettingsView())
+                    LiquidApplicationsView()
                 }
-            }.padding(24)
+            }.padding(20)
         }.foregroundColor(.white).background(OpenFluxBackdrop()).navigationBarHidden(false).navigationBarTitleDisplayMode(.inline)
     }
 }
 
 struct LiquidJournalView: View {
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {
+            LiquidMiniOrb()
             HStack { Text("Журнал приложения").font(.title2); Spacer(); OpenFluxSupportButton() }.padding(.horizontal, 20)
             LogsView(tunnel: TunnelManager.shared, embedded: true)
         }.foregroundColor(.white).background(OpenFluxBackdrop()).navigationBarHidden(false).navigationBarTitleDisplayMode(.inline)

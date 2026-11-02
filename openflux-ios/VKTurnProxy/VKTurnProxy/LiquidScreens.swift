@@ -17,8 +17,12 @@ private enum LiquidTexture {
 }
 struct LiquidGlass: View, Animatable {
     var level: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     var animatableData: Double { get { level } set { level = newValue } }
     var body: some View {
+        TimelineView(.animation(minimumInterval:1.0/60,paused:reduceMotion || scenePhase != .active)) { timeline in
+        let phase=reduceMotion ? 3.8 : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy:6.8) / 6.8 * .pi * 2
         Canvas { context,size in
             let shell=context.resolve(Image("LiquidEmpty"))
             let full=CGRect(origin:.zero,size:size)
@@ -32,7 +36,7 @@ struct LiquidGlass: View, Animatable {
             fluid.move(to:CGPoint(x:0,y:size.height))
             for step in 0...140 {
                 let x=size.width*CGFloat(step)/140
-                let y=target+sin(Double(step)/140 * .pi*2+3.8)*amplitude
+                let y=target+sin(Double(step)/140 * .pi*2+phase)*amplitude
                 let point=CGPoint(x:x,y:y)
                 fluid.addLine(to:point)
                 if step==0 {crest.move(to:point)} else {crest.addLine(to:point)}
@@ -47,7 +51,8 @@ struct LiquidGlass: View, Animatable {
             context.stroke(crest,with:.color(.orange),lineWidth:4)
             context.stroke(crest,with:.color(Color(red:1,green:0.93,blue:0.67)),lineWidth:1)
 
-        }.animation(.easeInOut(duration:1.1),value:level)
+        }
+        }.animation(reduceMotion ? nil : .easeInOut(duration:1.1),value:level)
     }
 }
 
@@ -57,7 +62,7 @@ struct LiquidPanel<Content:View>: View {
         .background(LiquidTheme.card,in:RoundedRectangle(cornerRadius:17)).overlay(RoundedRectangle(cornerRadius:17).stroke(OpenFluxStyle.border,lineWidth:0.8)) }
 }
 
-struct LiquidSettingsView: View {
+struct LiquidDiagnosticsView: View {
     @ObservedObject private var store=ServerStore.shared
     @ObservedObject private var tunnel=TunnelManager.shared
     @AppStorage("showVKCommunityCard") private var community=true
@@ -75,7 +80,7 @@ struct LiquidSettingsView: View {
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:14) {
-                HStack { Button {presentation.wrappedValue.dismiss()} label:{Image(systemName:"chevron.left")};Text("Настройки").font(.system(size:23));Spacer();OpenFluxSupportButton() }.padding(.vertical,12)
+                HStack { Button {presentation.wrappedValue.dismiss()} label:{Image(systemName:"chevron.left")};Text("Диагностика").font(.system(size:23));Spacer();OpenFluxSupportButton() }.padding(.vertical,12)
                 LiquidPanel {
                     Text("Ссылка подключения").font(.system(size:16))
                     TextEditor(text:$link).openFluxEditorBackground().frame(height:90).autocapitalization(.none).disableAutocorrection(true)
@@ -96,7 +101,7 @@ struct LiquidSettingsView: View {
                 LiquidPanel { Toggle("Группа ВКонтакте",isOn:$community) }
                 NavigationLink(destination:LiquidJournalView()){LiquidPanel{HStack{Label("Журнал приложения",systemImage:"doc.text");Spacer();Image(systemName:"chevron.right")}}}.buttonStyle(.plain)
                 LiquidCabinetButton()
-                Text("OpenFlux 2.0 · 483").font(.caption).foregroundColor(OpenFluxStyle.muted).padding(.vertical,12)
+                Text("OpenFlux 2.0 · 484").font(.caption).foregroundColor(OpenFluxStyle.muted).padding(.vertical,12)
             }.padding(.horizontal,20)
         }.background(OpenFluxBackdrop()).foregroundColor(LiquidTheme.text).tint(OpenFluxStyle.orange).navigationBarHidden(true)
             .onAppear {link=UserDefaults.standard.string(forKey:"openFluxConnectionLink") ?? ""}
@@ -136,5 +141,103 @@ struct LiquidReferralsView:View {
         }.foregroundColor(LiquidTheme.text).buttonStyle(.plain)
             .task(id:password) {guard !password.isEmpty else{return};do{summary=try await ReferralAPI.fetch(password:password)}catch{message="Не удалось обновить данные"}}
             .sheet(isPresented:$sharing){ShareSheet(activityItems:[summary?.url ?? ""])}
+    }
+}
+
+
+struct LiquidMiniOrb: View {
+    @ObservedObject private var store=ServerStore.shared
+    @ObservedObject private var monitor=SubscriptionMonitor.shared
+    private var access:SubscriptionAccess? {monitor.entries[store.activeServer.csqttPassword]?.status}
+    private var fill:Double {guard let access=access,access.state=="active" else{return 0};return access.daysRemaining.map{min(1,max(0,Double($0)/30))} ?? 1}
+    var body:some View {
+        ZStack {
+            LiquidGlass(level:fill)
+            VStack(spacing:5) {
+                Text(access == nil ? "—" : "\(Int(fill*100))%").font(.system(size:25,weight:.semibold))
+                Text(access?.daysRemaining.map{"\($0) дн."} ?? "Срок уточняется").font(.system(size:13))
+            }.foregroundColor(LiquidTheme.text).offset(y:12)
+        }.frame(width:168,height:168)
+            .task(id:store.activeServer.csqttPassword){_ = await monitor.refresh(password:store.activeServer.csqttPassword)}
+    }
+}
+
+struct LiquidSettingsView:View {
+    @Environment(\.presentationMode) private var presentation
+    var body:some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:12) {
+                HStack {Text("OPENFLUX").font(.system(size:20,weight:.bold));Spacer();OpenFluxSupportButton()}
+                LiquidMiniOrb().frame(maxWidth:.infinity)
+                Text("Настройки").font(.system(size:29,weight:.semibold)).padding(.bottom,8)
+                NavigationLink(destination:LiquidDiagnosticsView()){row("Ссылка подключения","link")}
+                NavigationLink(destination:LiquidDiagnosticsView()){row("Диагностика","stethoscope")}
+                NavigationLink(destination:LiquidJournalView()){row("Журнал приложения","doc.text")}
+                NavigationLink(destination:LiquidSection(kind:"Приложения")){row("Приложения","square.grid.2x2")}
+                LiquidPanel {
+                    Label("О приложении",systemImage:"info.circle")
+                    Text("OpenFlux 2.0 · 484").font(.caption).foregroundColor(OpenFluxStyle.muted)
+                }
+                LiquidCabinetButton()
+            }.padding(.horizontal,20).padding(.top,12).padding(.bottom,16)
+        }.safeAreaInset(edge:.bottom) {
+            HStack {
+                Button {presentation.wrappedValue.dismiss()} label:{Label("Главная",systemImage:"house")}
+                Spacer();Label("Настройки",systemImage:"gearshape.fill").foregroundColor(OpenFluxStyle.orange)
+            }.font(.system(size:13)).padding(20).background(LiquidTheme.card)
+        }.background(OpenFluxBackdrop()).foregroundColor(LiquidTheme.text).tint(OpenFluxStyle.orange).navigationBarHidden(true)
+    }
+    private func row(_ title:String,_ icon:String)->some View {
+        LiquidPanel {HStack {Label(title,systemImage:icon);Spacer();Image(systemName:"chevron.right").foregroundColor(OpenFluxStyle.orange)}}
+    }
+}
+
+struct LiquidApplicationsView:View {
+    var body:some View {
+        VStack(spacing:14) {
+            app("iOS","apple.logo")
+            app("Android","smartphone")
+            NavigationLink(destination:LiquidDiagnosticsView()){LiquidPanel{Label("Ссылка подключения",systemImage:"link")}}
+            Link(destination:URL(string:"https://open-flux.ru/account")!){LiquidPanel{Label("Инструкция",systemImage:"book")}}
+        }.buttonStyle(.plain)
+    }
+    private func app(_ name:String,_ icon:String)->some View {
+        Link(destination:URL(string:"https://open-flux.ru/account")!) {
+            LiquidPanel {
+                HStack {
+                    VStack(alignment:.leading,spacing:12) {
+                        Image(systemName:icon).font(.system(size:36))
+                        Text("Установить для \(name)").font(.system(size:22,weight:.medium))
+                        Text("Установка и ваши устройства").font(.caption).foregroundColor(OpenFluxStyle.muted)
+                    };Spacer();Image(systemName:"chevron.right").foregroundColor(OpenFluxStyle.orange)
+                }.padding(.vertical,10)
+            }
+        }
+    }
+}
+
+struct LiquidSubscriptionView:View {
+    @ObservedObject private var store=ServerStore.shared
+    @ObservedObject private var monitor=SubscriptionMonitor.shared
+    var body:some View {
+        VStack(spacing:14) {
+            LiquidPanel {
+                HStack {
+                    LiquidMiniOrb()
+                    VStack(alignment:.leading,spacing:12) {
+                        Text(monitor.entries[store.activeServer.csqttPassword]?.status.state == "active" ? "● Доступ активен" : "Статус доступа").font(.system(size:13)).foregroundColor(.green)
+                        Text("Срок и продление вашей подписки OpenFlux").font(.system(size:13)).foregroundColor(OpenFluxStyle.muted)
+                    }
+                }
+            }
+            Link(destination:URL(string:"https://open-flux.ru/account")!) {
+                HStack {Image(systemName:"creditcard");Text("Продлить подписку");Spacer();Image(systemName:"chevron.right")}
+                    .padding(20).foregroundColor(Color(red:0.13,green:0.04,blue:0.01))
+                    .background(LinearGradient(colors:[.orange,Color(red:1,green:0.38,blue:0.05)],startPoint:.top,endPoint:.bottom),in:RoundedRectangle(cornerRadius:17))
+            }
+            Link(destination:URL(string:"https://open-flux.ru/account")!){LiquidPanel{Label("История оплат",systemImage:"doc.text")}}
+            Link(destination:URL(string:"https://open-flux.ru/account")!){LiquidPanel{Label("Мои заявки",systemImage:"text.bubble")}}
+            NavigationLink(destination:LiquidSection(kind:"Приложения")){LiquidPanel{Label("Приложения",systemImage:"square.grid.2x2")}}
+        }.buttonStyle(.plain)
     }
 }

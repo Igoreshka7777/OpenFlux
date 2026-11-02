@@ -105,10 +105,10 @@ struct ContentView: View {
             // user can scroll instead of losing access to them. On
             // larger screens the content fits without scrolling.
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 12) {
                     HStack(spacing: 10) {
                         (Text("OPEN").foregroundColor(Color(red:1,green:0.89,blue:0.77)) + Text("FLUX").foregroundColor(openFluxOrange))
-                            .font(.system(size: 17, weight: .bold))
+                            .font(.system(size: 20, weight: .bold))
                         Spacer()
                         OpenFluxSupportButton()
 
@@ -118,14 +118,18 @@ struct ContentView: View {
 
                     // Keep active-server observation below the NavigationView host.
                     ActiveServerControls(tunnel: tunnel)
-                    if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress { LiquidNavigation() }
                     Spacer(minLength: 12)
 
 
                 }
-                .padding(.horizontal, 26)
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity, minHeight: 620)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+            }
+            .safeAreaInset(edge:.bottom) {
+                if tunnel.status != .connected && tunnel.status != .connecting && !tunnel.preBootstrapInProgress {
+                    LiquidNavigation().padding(.horizontal,12).background(LiquidTheme.card)
+                }
             }
             .background(OpenFluxBackdrop())
             .navigationBarHidden(true)
@@ -657,8 +661,7 @@ private struct ActiveServerControls: View {
                 LiquidPowerControl(status: connectionStatusText, connected: tunnel.status == .connected)
 
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
+            .padding(.top, 4)
             // Block Connect when a required field for the active mode is
             // empty/invalid (e.g. WRAP-A without a password → Go disables
             // WRAP-A → broken direct fallback; or a malformed peerAddress /
