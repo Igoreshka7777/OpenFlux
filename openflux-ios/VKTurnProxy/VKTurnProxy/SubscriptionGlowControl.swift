@@ -24,7 +24,7 @@ struct SubscriptionGlowControl: View {
                     Text(status).font(.system(size:17,weight:.medium))
                 }.foregroundColor(Color(red:1,green:0.93,blue:0.85))
             }
-        }.frame(maxWidth:380).aspectRatio(1,contentMode:.fit).contentShape(Circle())
+        }.frame(maxWidth:.infinity).aspectRatio(1,contentMode:.fit).contentShape(Circle())
         .onAppear {displayLevel=min(1,max(0,level));connectionGlow=status=="Подключено" ? 1 : 0}
         .onChange(of:status) {v in
             waveStart=v=="Подключено" && !reduceMotion ? Date() : nil
@@ -44,15 +44,22 @@ private struct GlowCanvas:View,Animatable {
     var wave:Double
     var animatableData:AnimatablePair<Double,Double> {get{AnimatablePair(level,connectionGlow)} set{level=newValue.first;connectionGlow=newValue.second}}
     var body:some View {
-        Canvas {context,size in
-            render(context:&context,size:size)
+        // Overscan keeps the halo transparent before the drawing surface ends.
+        // Its layout stays unchanged so surrounding controls remain tappable.
+        GeometryReader { geometry in
+            Canvas {context,size in
+                render(context:&context,size:size)
+            }
+            .frame(width:geometry.size.width*2,height:geometry.size.height*2)
+            .position(x:geometry.size.width/2,y:geometry.size.height/2)
+            .allowsHitTesting(false)
         }
     }
     private func circle(_ center:CGPoint,_ radius:Double)->Path {
         Path(ellipseIn:CGRect(x:Double(center.x)-radius,y:Double(center.y)-radius,width:radius*2,height:radius*2))
     }
     private func render(context:inout GraphicsContext,size:CGSize) {
-        let dimension=Double(min(size.width,size.height))
+        let dimension=Double(min(size.width,size.height))/2.0
         let r=dimension*0.29
         let center=CGPoint(x:size.width/2,y:size.height/2)
         if level>0 && connectionGlow>0 {drawHalo(context:&context,center:center,r:r,dimension:dimension)}

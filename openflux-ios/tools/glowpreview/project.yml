@@ -1,0 +1,17 @@
+name: GlowPreview
+options:
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  GlowPreview:
+    type: application
+    platform: iOS
+    sources:
+      - path: Preview.swift
+      - path: ../../VKTurnProxy/VKTurnProxy/SubscriptionGlowControl.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.openflux.glowpreview
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: 1

@@ -652,7 +652,8 @@ private struct ActiveServerControls: View {
                     tunnel.status == .connecting || tunnel.status == .reasserting ||
                     tunnel.status == .connected))
             }
-            .padding(.horizontal)
+            .buttonStyle(.plain)
+            .padding(.horizontal, -26)
             .padding(.top, 8)
             // Block Connect when a required field for the active mode is
             // empty/invalid (e.g. WRAP-A without a password → Go disables
