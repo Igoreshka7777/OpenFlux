@@ -45,42 +45,63 @@ private struct GlowCanvas:View,Animatable {
     var animatableData:AnimatablePair<Double,Double> {get{AnimatablePair(level,connectionGlow)} set{level=newValue.first;connectionGlow=newValue.second}}
     var body:some View {
         Canvas {context,size in
-            let r=min(size.width,size.height)*0.29
-            let center=CGPoint(x:size.width/2,y:size.height/2)
-            if level>0 && connectionGlow>0 {
-                let outer=r+min(size.width,size.height)*(0.025+0.42*level)
-                let edge=r/outer
-                let stops:[Gradient.Stop]=(0...129).map {i in
-                    let t=i==0 ? 0 : Double(i-1)/128
-                    let pattern=reduceMotion ? 1.0 : 0.65+0.35*cos(t*12-phase*2)
-                    let alpha=i==129 ? 0 : level*pulse*connectionGlow*pattern*exp(-2.8*t*t)*(1-t*t)*(1-t*t)
-                    return .init(color:Color(red:1,green:100/255,blue:18/255).opacity(alpha),location:i==0 ? 0 : edge+(1-edge)*t)
-                }
-                let halo=Path(ellipseIn:CGRect(x:center.x-outer,y:center.y-outer,width:outer*2,height:outer*2))
-                context.fill(halo,with:.radialGradient(Gradient(stops:stops),center:center,startRadius:0,endRadius:outer))
-            }
-            if collecting && !reduceMotion {
-                for i in 0..<18 {
-                    let t=(collectionPhase+Double(i)/18).truncatingRemainder(dividingBy:1)
-                    let a=Double(i)*2*Double.pi/18
-                    let distance=r+min(size.width,size.height)*0.22*(1-t)
-                    let start=CGPoint(x:center.x+cos(a)*distance,y:center.y+sin(a)*distance)
-                    var ray=Path();ray.move(to:start)
-                    ray.addLine(to:CGPoint(x:start.x+cos(a)*14*(1-t),y:start.y+sin(a)*14*(1-t)))
-                    context.stroke(ray,with:.color(Color(red:1,green:170/255,blue:102/255).opacity(sin(t * .pi)*0.8)),lineWidth:1.5)
-                }
-            }
-            if wave<1 && !reduceMotion {
-                for i in 0...1 {
-                    let t=min(1,max(0,(wave-Double(i)*0.1)/0.9))
-                    let radius=r+min(size.width,size.height)*0.6*t
-                    let ring=Path(ellipseIn:CGRect(x:center.x-radius,y:center.y-radius,width:radius*2,height:radius*2))
-                    context.stroke(ring,with:.color(Color(red:1,green:152/255,blue:76/255).opacity((1-t)*(1-t)*0.7)),lineWidth:2+4*t)
-                }
-            }
-            let circle=Path(ellipseIn:CGRect(x:center.x-r,y:center.y-r,width:r*2,height:r*2))
-            context.fill(circle,with:.color(.black))
-            context.stroke(circle,with:.color(Color(red:1,green:100/255,blue:18/255)),lineWidth:1.6)
+            render(context:&context,size:size)
+        }
+    }
+    private func circle(_ center:CGPoint,_ radius:Double)->Path {
+        Path(ellipseIn:CGRect(x:Double(center.x)-radius,y:Double(center.y)-radius,width:radius*2,height:radius*2))
+    }
+    private func render(context:inout GraphicsContext,size:CGSize) {
+        let dimension=Double(min(size.width,size.height))
+        let r=dimension*0.29
+        let center=CGPoint(x:size.width/2,y:size.height/2)
+        if level>0 && connectionGlow>0 {drawHalo(context:&context,center:center,r:r,dimension:dimension)}
+        if collecting && !reduceMotion {drawRays(context:&context,center:center,r:r,dimension:dimension)}
+        if wave<1 && !reduceMotion {drawWaves(context:&context,center:center,r:r,dimension:dimension)}
+        let core=circle(center,r)
+        context.fill(core,with:.color(.black))
+        let orange=Color(red:1.0,green:100.0/255.0,blue:18.0/255.0)
+        context.stroke(core,with:.color(orange),lineWidth:1.6)
+    }
+    private func drawHalo(context:inout GraphicsContext,center:CGPoint,r:Double,dimension:Double) {
+        let outer=r+dimension*(0.025+0.42*level)
+        let edge=r/outer
+        var stops=[Gradient.Stop]()
+        let orange=Color(red:1.0,green:100.0/255.0,blue:18.0/255.0)
+        for i in 0...129 {
+            let t:Double=i==0 ? 0.0 : Double(i-1)/128.0
+            let pattern:Double=reduceMotion ? 1.0 : 0.65+0.35*cos(t*12.0-phase*2.0)
+            let tail:Double=1.0-t*t
+            let falloff:Double=exp(-2.8*t*t)*tail*tail
+            let strength:Double=level*pulse*connectionGlow
+            let alpha:Double=i==129 ? 0.0 : strength*pattern*falloff
+            let location:Double=i==0 ? 0.0 : edge+(1.0-edge)*t
+            stops.append(Gradient.Stop(color:orange.opacity(alpha),location:CGFloat(location)))
+        }
+        let shading=GraphicsContext.Shading.radialGradient(Gradient(stops:stops),center:center,startRadius:0,endRadius:CGFloat(outer))
+        context.fill(circle(center,outer),with:shading)
+    }
+    private func drawRays(context:inout GraphicsContext,center:CGPoint,r:Double,dimension:Double) {
+        for i in 0..<18 {
+            let t=(collectionPhase+Double(i)/18.0).truncatingRemainder(dividingBy:1.0)
+            let a=Double(i)*2.0*Double.pi/18.0
+            let distance=r+dimension*0.22*(1.0-t)
+            let sx=Double(center.x)+cos(a)*distance
+            let sy=Double(center.y)+sin(a)*distance
+            let length=14.0*(1.0-t)
+            var ray=Path();ray.move(to:CGPoint(x:sx,y:sy))
+            ray.addLine(to:CGPoint(x:sx+cos(a)*length,y:sy+sin(a)*length))
+            let color=Color(red:1.0,green:170.0/255.0,blue:102.0/255.0).opacity(sin(t*Double.pi)*0.8)
+            context.stroke(ray,with:.color(color),lineWidth:1.5)
+        }
+    }
+    private func drawWaves(context:inout GraphicsContext,center:CGPoint,r:Double,dimension:Double) {
+        for i in 0...1 {
+            let t=min(1.0,max(0.0,(wave-Double(i)*0.1)/0.9))
+            let radius=r+dimension*0.6*t
+            let alpha=(1.0-t)*(1.0-t)*0.7
+            let color=Color(red:1.0,green:152.0/255.0,blue:76.0/255.0).opacity(alpha)
+            context.stroke(circle(center,radius),with:.color(color),lineWidth:CGFloat(2.0+4.0*t))
         }
     }
 }
