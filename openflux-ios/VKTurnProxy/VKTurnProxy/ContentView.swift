@@ -81,6 +81,7 @@ extension View {
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager.shared
     @State private var showInitialLink = false
+    @State private var navigationIdentity = UUID()
 
 
     // 🚨 THIS VIEW HOSTS THE `NavigationView`, SO IT SUBSCRIBES TO NOTHING BUT
@@ -185,6 +186,10 @@ struct ContentView: View {
             // → ConnectionLinkImport.swift.
             .background(ConnectionLinkImporter())
             .background(SubscriptionPresentationHost())
+        }
+        .id(navigationIdentity)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenFluxHomeRequested"))) { _ in
+            navigationIdentity = UUID()
         }
     }
 

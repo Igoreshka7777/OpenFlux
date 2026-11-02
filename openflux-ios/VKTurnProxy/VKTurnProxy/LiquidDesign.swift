@@ -14,16 +14,23 @@ struct LiquidCabinetButton: View {
 }
 
 struct LiquidNavigation: View {
-    var body: some View {
+    var selected:String="Главная"
+    @Environment(\.presentationMode) private var presentation
+    var body:some View {
         HStack {
-            navIcon("Главная", "house.fill").foregroundColor(OpenFluxStyle.orange)
-            NavigationLink(destination: LiquidSection(kind: "Подписка")) { navIcon("Подписка", "crown") }
-            NavigationLink(destination: LiquidSection(kind: "Рефералы")) { navIcon("Рефералы", "person.2") }
-            NavigationLink(destination: LiquidSettingsView()) { navIcon("Настройки", "gearshape") }
-        }.foregroundColor(OpenFluxStyle.muted).padding(.vertical, 12)
+            if selected=="Главная" {navIcon("Главная","house.fill")}
+            else {Button {NotificationCenter.default.post(name:Notification.Name("OpenFluxHomeRequested"),object:nil)} label:{navIcon("Главная","house")}}
+            item("Подписка","crown",destination:LiquidSection(kind:"Подписка"))
+            item("Рефералы","person.2",destination:LiquidSection(kind:"Рефералы"))
+            item("Настройки","gearshape",destination:LiquidSettingsView())
+        }.foregroundColor(LiquidTheme.text).padding(.vertical,12).buttonStyle(.plain)
     }
-    private func navIcon(_ name: String, _ icon: String) -> some View {
-        VStack(spacing: 5) { Image(systemName: icon).font(.system(size: 18)); Text(name).font(.system(size: 9)) }.frame(maxWidth: .infinity)
+    @ViewBuilder private func item<Destination:View>(_ name:String,_ icon:String,destination:Destination)->some View {
+        if selected==name {navIcon(name,icon)} else {NavigationLink(destination:destination){navIcon(name,icon)}}
+    }
+    private func navIcon(_ name:String,_ icon:String)->some View {
+        VStack(spacing:5) {Image(systemName:icon).font(.system(size:22));Text(name).font(.system(size:10))}
+            .frame(maxWidth:.infinity).foregroundColor(selected==name ? OpenFluxStyle.orange : LiquidTheme.text)
     }
 }
 
@@ -43,7 +50,8 @@ struct LiquidSection: View {
                     LiquidApplicationsView()
                 }
             }.padding(20)
-        }.foregroundColor(.white).background(OpenFluxBackdrop()).navigationBarHidden(false).navigationBarTitleDisplayMode(.inline)
+        }.safeAreaInset(edge:.bottom) {LiquidNavigation(selected:kind).padding(.horizontal,12).background(LiquidTheme.card)}
+        .foregroundColor(LiquidTheme.text).background(OpenFluxBackdrop()).navigationBarHidden(false).navigationBarTitleDisplayMode(.inline)
     }
 }
 

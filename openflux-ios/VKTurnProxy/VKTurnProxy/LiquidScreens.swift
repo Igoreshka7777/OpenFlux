@@ -26,7 +26,7 @@ struct LiquidGlass: View, Animatable {
         Canvas { context,size in
             let shell=context.resolve(Image("LiquidEmpty"))
             let full=CGRect(origin:.zero,size:size)
-            context.draw(shell,in:full)
+            var glass=context;glass.blendMode = .screen;glass.draw(shell,in:full)
             let inner=CGRect(x:size.width*0.14,y:size.height*0.115,width:size.width*0.72,height:size.height*0.72)
             context.clip(to:Path(ellipseIn:inner))
             guard level>0 else {return}
@@ -42,11 +42,21 @@ struct LiquidGlass: View, Animatable {
                 if step==0 {crest.move(to:point)} else {crest.addLine(to:point)}
             }
             fluid.addLine(to:CGPoint(x:size.width,y:size.height));fluid.closeSubpath()
-            context.fill(fluid,with:.radialGradient(Gradient(colors:[Color(red:82/255,green:27/255,blue:0),Color(red:190/255,green:69/255,blue:0),.orange]),center:CGPoint(x:size.width*0.5,y:size.height*0.55),startRadius:0,endRadius:size.width*0.5))
+            context.fill(fluid,with:.radialGradient(Gradient(colors:[Color(red:122/255,green:39/255,blue:0),Color(red:233/255,green:103/255,blue:0),Color(red:1,green:178/255,blue:10/255)]),center:CGPoint(x:size.width*0.5,y:size.height*0.55),startRadius:0,endRadius:size.width*0.5))
             if let texture=LiquidTexture.image {
-                var liquid=context;liquid.clip(to:fluid);liquid.opacity=0.7
+                var liquid=context;liquid.clip(to:fluid);liquid.opacity=0.6;liquid.blendMode = .screen
                 liquid.draw(liquid.resolve(Image(uiImage:texture)),in:full)
             }
+            var ribbon=crest;var second=Path()
+            for step in stride(from:140,through:0,by:-1) {
+                let x=size.width*CGFloat(step)/140
+                let y=target+sin(Double(step)/140 * .pi*2+phase+1.1)*amplitude
+                ribbon.addLine(to:CGPoint(x:x,y:y))
+                if step==140 {second.move(to:CGPoint(x:x,y:y))} else {second.addLine(to:CGPoint(x:x,y:y))}
+            }
+            ribbon.closeSubpath()
+            context.fill(ribbon,with:.linearGradient(Gradient(colors:[Color.yellow.opacity(0.7),Color.orange.opacity(0.8)]),startPoint:CGPoint(x:0,y:target-amplitude),endPoint:CGPoint(x:0,y:target+amplitude)))
+            context.stroke(second,with:.color(Color.yellow.opacity(0.8)),lineWidth:1.4)
             context.stroke(crest,with:.color(.orange.opacity(0.35)),lineWidth:10)
             context.stroke(crest,with:.color(.orange),lineWidth:4)
             context.stroke(crest,with:.color(Color(red:1,green:0.93,blue:0.67)),lineWidth:1)
@@ -128,7 +138,9 @@ struct LiquidReferralsView:View {
     var body:some View {
         VStack(spacing:14) {
             LiquidPanel {
-                Text("Бонусный баланс").font(.system(size:13)).foregroundColor(OpenFluxStyle.muted)
+                Label("Приглашай друзей",systemImage:"person.2.fill").font(.system(size:23,weight:.medium))
+                Text("Получайте бонусы за приглашения").font(.system(size:13)).foregroundColor(OpenFluxStyle.muted)
+                Text("Бонусы").font(.system(size:13)).foregroundColor(OpenFluxStyle.muted)
                 Text(summary.map{NSDecimalNumber(decimal:Decimal($0.balance)/100).stringValue+" ₽"} ?? "— ₽").font(.system(size:34))
                 Text("Приглашено друзей: \(summary.map{String($0.count)} ?? "—")").font(.system(size:14))
                 if !message.isEmpty {Text(message).font(.caption).foregroundColor(OpenFluxStyle.muted)}
@@ -137,6 +149,10 @@ struct LiquidReferralsView:View {
                 LiquidPanel {Text(data.url).font(.system(size:12)).textSelection(.enabled)}
                 Button {UIPasteboard.general.string=data.url;message="Ссылка скопирована"} label:{LiquidPanel{Text("Копировать ссылку")}}
                 Button {sharing=true} label:{LiquidPanel{Text("Пригласить друга")}}
+                LiquidPanel {
+                    Text("Приглашённые друзья").font(.system(size:18))
+                    Text(data.count == 0 ? "Здесь пока никого нет. Поделись своей ссылкой, чтобы пригласить друзей." : "Приглашено: \(data.count). Подробности доступны в личном кабинете.").font(.system(size:13)).foregroundColor(OpenFluxStyle.muted)
+                }
             }
         }.foregroundColor(LiquidTheme.text).buttonStyle(.plain)
             .task(id:password) {guard !password.isEmpty else{return};do{summary=try await ReferralAPI.fetch(password:password)}catch{message="Не удалось обновить данные"}}
@@ -181,10 +197,7 @@ struct LiquidSettingsView:View {
                 LiquidCabinetButton()
             }.padding(.horizontal,20).padding(.top,12).padding(.bottom,16)
         }.safeAreaInset(edge:.bottom) {
-            HStack {
-                Button {presentation.wrappedValue.dismiss()} label:{Label("Главная",systemImage:"house")}
-                Spacer();Label("Настройки",systemImage:"gearshape.fill").foregroundColor(OpenFluxStyle.orange)
-            }.font(.system(size:13)).padding(20).background(LiquidTheme.card)
+            LiquidNavigation(selected:"Настройки").padding(.horizontal,12).background(LiquidTheme.card)
         }.background(OpenFluxBackdrop()).foregroundColor(LiquidTheme.text).tint(OpenFluxStyle.orange).navigationBarHidden(true)
     }
     private func row(_ title:String,_ icon:String)->some View {
