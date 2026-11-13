@@ -2,7 +2,7 @@ name: OpenFlux iOS unsigned
 
 on:
   push:
-    branches: [codex/openflux-ios-451, codex/openflux-ios-455]
+    branches: [codex/ios-network-recovery-490]
     paths:
       - 'openflux-ios/**'
       - '.github/workflows/openflux-ios-unsigned.yml'
@@ -27,7 +27,7 @@ jobs:
           cache-dependency-path: openflux-ios/go.sum
       - name: Check VPN relay fallback and credential leases
         working-directory: openflux-ios
-        run: go test -race ./pkg/csqtt ./pkg/proxy -run 'Test(SilentHandshake|UnreachableRelay|PrimaryOnlySeed|CredentialLease|RefusedAllocation)' -count=1
+        run: go test -race ./pkg/csqtt ./pkg/proxy -run 'Test(SilentHandshake|UnreachableRelay|PrimaryOnlySeed|CredentialLease|RefusedAllocation|PathChangeCarriesANewIdentity|KickDuringFailureBackoffRedialsAtOnceAndOnce|CloseIsBounded|AllDeafWorkersAreAskedAtOnceAndThenReplacedTogether|TheWakeVerdictReplacesDeafWorkersWithinSeconds|BackoffAfterIsOneRuleForBothExits)' -count=1
   ios:
     needs: relay-failover-tests
     runs-on: macos-15-intel
@@ -44,6 +44,10 @@ jobs:
           cache-dependency-path: openflux-ios/go.sum
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Check Wi-Fi and cellular recovery event ordering
+        run: |
+          swiftc VKTurnProxy/PacketTunnel/NetworkPathEventGate.swift tools/networkpathcheck/main.swift -o "$RUNNER_TEMP/networkpathcheck"
+          "$RUNNER_TEMP/networkpathcheck"
       - name: Check subscription dates and expiry
         run: |
           swiftc VKTurnProxy/VKTurnProxy/SubscriptionAccess.swift tools/subscriptioncheck/main.swift -o "$RUNNER_TEMP/subscriptioncheck"
@@ -106,7 +110,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-489-unsigned
+          name: OpenFlux-iOS-490-unsigned
           path: |
             openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
             openflux-ios/build_output/SHA256SUMS.txt
@@ -116,17 +120,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-489-build-log
+          name: OpenFlux-iOS-490-build-log
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
-      - name: Render halo on iPhone simulator
-        timeout-minutes: 4
-        continue-on-error: true
-        run: bash tools/glowpreview/render.sh
-      - name: Upload halo screenshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenFlux-iOS-489-preview
-          if-no-files-found: warn
-          path: openflux-ios/tools/glowpreview/glow-489.png

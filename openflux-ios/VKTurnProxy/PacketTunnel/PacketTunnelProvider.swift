@@ -79,6 +79,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // outside it.
     private var _pathMonitor: NWPathMonitor?
     private let pathMonitorQueue = DispatchQueue(label: "com.vkturnproxy.tunnel.pathmonitor")
+    private var pathEventGate = NetworkPathEventGate()
 
     /// Installs `monitor` in the slot (nil clears it) and cancels whatever the
     /// slot held — unless the stop has run, in which case the incoming monitor
@@ -1016,11 +1017,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
+            guard !self.stopRequested else { return }
+            let ticket = self.pathEventGate.begin()
 
             // Process the path event after the (possibly async) SSID
             // refresh completes — describePath reads currentWiFiSSID.
             let process = { [weak self] in
                 guard let self = self else { return }
+                guard !self.stopRequested, self.pathEventGate.finish(ticket) else { return }
                 let desc = self.describePath(path)
                 // Deduplicate identical updates — NWPathMonitor sometimes
                 // fires multiple times on a single transition (DNS update,
@@ -1122,6 +1126,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             // missing entitlement) — we still proceed in either case so
             // path event logging never blocks on the SSID lookup.
             if path.usesInterfaceType(Network.NWInterface.InterfaceType.wifi) {
+                // SSID is optional metadata. It must never block recovery if
+                // iOS withholds the callback. The gate accepts only one result.
+                self.pathMonitorQueue.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+                    guard let self = self, !self.stopRequested else { return }
+                    guard self.pathEventGate.isPending(ticket) else { return }
+                    self.currentWiFiSSID = nil
+                    process()
+                }
                 NEHotspotNetwork.fetchCurrent { [weak self] network in
                     guard let self = self else { return }
                     // 🚨 BACK ONTO THE PATH QUEUE FIRST. fetchCurrent answers on
@@ -1132,6 +1144,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     // read in describePath / pathEssentialIdentity, is on
                     // pathMonitorQueue now; stopPathMonitoring clears there too.
                     self.pathMonitorQueue.async {
+                        guard !self.stopRequested, self.pathEventGate.isPending(ticket) else { return }
                         // Sanitize the network-controlled SSID before it
                         // reaches any log sink (describePath → vpn.log, and
                         // describePath → wgLogPathSnapshot → Go pathstats): an
@@ -1172,6 +1185,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // the identity with the network it is on: harmless either way.
         pathMonitorQueue.async { [weak self] in
             guard let self = self else { return }
+            self.pathEventGate.invalidate()
             self.lastPathDescription = nil
             self.lastPathEssentialIdentity = nil
             self.currentWiFiSSID = nil
