@@ -12,13 +12,18 @@ final class SubscriptionMonitor: ObservableObject {
     }
     @Published private(set) var entries: [String: Entry] = [:]
     private var revisions: [String: Int] = [:]
+    private var checkedAt: [String: TimeInterval] = [:]
 
     @discardableResult
     func refresh(password: String, presentAgain: Bool = false) async -> SubscriptionAccess? {
+        let requestedAt = ProcessInfo.processInfo.systemUptime
+        if presentAgain, let cached = entries[password]?.status,
+           startupAccessFresh(state: cached.state, expiresAt: cached.expiresAt, serverTime: cached.serverTime, checkedAt: checkedAt[password], now: requestedAt) { return cached }
         let revision = (revisions[password] ?? 0) + 1
         revisions[password] = revision
         guard let status = await SubscriptionAPI.fetch(password: password), !Task.isCancelled,
               revisions[password] == revision else { return nil }
+        checkedAt[password] = requestedAt
         let old = entries[password]
         let changed = status.expired && (presentAgain || old?.status.expired != true || old?.status.expiresAt != status.expiresAt)
         let entry = Entry(status: status, presentation: (old?.presentation ?? 0) + (changed ? 1 : 0))

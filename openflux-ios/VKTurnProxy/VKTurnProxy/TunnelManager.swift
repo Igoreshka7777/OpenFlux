@@ -464,13 +464,17 @@ class TunnelManager: ObservableObject {
     /// checked after each wait and, in applyConfigurationAndStart, right before
     /// startVPNTunnel(); the settle sleep there throws on it.
     private func runConnectAttempt(config: TunnelConfig) async {
-        await IOSUpdateMonitor.shared.refresh()
+        // Optional update discovery must not delay transport bootstrap.
+        Task { await IOSUpdateMonitor.shared.refresh() }
+        let preflightStarted = ProcessInfo.processInfo.systemUptime
         if attemptCancelled() { return }
         var config = config
         if config.useCsqtt {
             let access = await SubscriptionMonitor.shared.refresh(password: config.csqttPassword, presentAgain: true)
             if access?.expired == true || attemptCancelled() { return }
         }
+
+        SharedLogger.shared.log("[STARTUP] Subscription preflight: \(Int((ProcessInfo.processInfo.systemUptime - preflightStarted) * 1000)) ms")
 
         if config.useCsqtt && !config.csqttVKToken.isEmpty {
             let result = await VKCallsAPI.startCall(accessToken: config.csqttVKToken)
