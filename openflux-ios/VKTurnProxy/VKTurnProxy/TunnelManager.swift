@@ -467,6 +467,12 @@ class TunnelManager: ObservableObject {
         // Optional update discovery must not delay transport bootstrap.
         Task { await IOSUpdateMonitor.shared.refresh() }
         let preflightStarted = ProcessInfo.processInfo.systemUptime
+        // DNS has no dependency on account status. Overlap it with verification,
+        // but still gate all tunnel startup on the existing access checks.
+        let startupDNS = Task.detached(priority: .userInitiated) { [self] in
+            config.useCsqtt ? self.resolveVKHosts() : [:]
+        }
+        defer { startupDNS.cancel() }
         if attemptCancelled() { return }
         var config = config
         if config.useCsqtt {
@@ -532,9 +538,7 @@ class TunnelManager: ObservableObject {
             // (EADDRNOTAVAIL) on the VK resolve/dial below can be correlated
             // with whether the device actually has a usable IPv4 source address.
             logNetworkInterfaces()
-            let vkHostIPs = await Task.detached(priority: .userInitiated) { [self] in
-                self.resolveVKHosts()
-            }.value
+            let vkHostIPs = await startupDNS.value
             if attemptCancelled() { return }
             if !vkHostIPs.isEmpty {
                 SharedLogger.shared.log("[AppDebug] TunnelManager.connect: pre-resolved VK hosts: \(vkHostIPs)")

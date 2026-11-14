@@ -2,7 +2,7 @@ name: OpenFlux iOS unsigned
 
 on:
   push:
-    branches: [codex/startup-speed-491]
+    branches: [codex/startup-parallel-492]
     paths:
       - 'openflux-ios/**'
       - '.github/workflows/openflux-ios-unsigned.yml'
@@ -48,6 +48,10 @@ jobs:
         run: |
           swiftc VKTurnProxy/PacketTunnel/NetworkPathEventGate.swift tools/networkpathcheck/main.swift -o "$RUNNER_TEMP/networkpathcheck"
           "$RUNNER_TEMP/networkpathcheck"
+      - name: Check concurrent subscription requests
+        run: |
+          swiftc -parse-as-library VKTurnProxy/VKTurnProxy/StartupRequestCoalescer.swift tools/startupcoalescercheck/main.swift -o "$RUNNER_TEMP/startupcoalescercheck"
+          "$RUNNER_TEMP/startupcoalescercheck"
       - name: Check startup freshness boundaries
         run: |
           swiftc VKTurnProxy/VKTurnProxy/StartupAccessFreshness.swift tools/startupcheck/main.swift -o "$RUNNER_TEMP/startupcheck"
@@ -114,7 +118,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-491-unsigned
+          name: OpenFlux-iOS-492-unsigned
           path: |
             openflux-ios/build_output/OpenFlux-iOS-*-unsigned.ipa
             openflux-ios/build_output/SHA256SUMS.txt
@@ -124,7 +128,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenFlux-iOS-491-build-log
+          name: OpenFlux-iOS-492-build-log
           path: openflux-ios/build_output/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
